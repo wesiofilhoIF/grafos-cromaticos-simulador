@@ -1,0 +1,26 @@
+{
+  "name": "simulador-grafos-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Servidor MCP que expõe o motor do Simulador de Grafos Cromáticos (wesiofilhoIF/grafos-cromaticos-simulador) como ferramentas para o agente produzir explicações de Teoria dos Grafos.",
+  "main": "src/server.js",
+  "bin": {
+    "simulador-grafos-mcp": "src/server.js"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/*.test.mjs",
+    "check:html": "node scripts/check-html.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "zod": "^4.6.7"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@babel/standalone": "^8.0.7"
+  }
+}

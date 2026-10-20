@@ -871,6 +871,333 @@
       return steps;
     }
 
+    // ==========================================
+    // CATÁLOGO DE ALGORITMOS DE SIMULAÇÃO
+    // ==========================================
+    const SIMULATION_ALGORITHMS = [
+      { id: 'dsatur', name: 'DSatur (Brélaz)', tag: 'Mais Eficiente', desc: 'Prioriza vértices com maior saturação de cores' },
+      { id: 'welsh-powell', name: 'Welsh-Powell', tag: 'Por Graus', desc: 'Ordena vértices por grau decrescente' },
+      { id: 'greedy', name: 'Guloso Sequencial', tag: 'First-Fit', desc: 'Processa vértices na ordem natural' },
+      { id: 'exact', name: 'Coloração Exata', tag: 'Ótimo χ', desc: 'Branch-and-bound garantindo o menor χ(G)' }
+    ];
+
+    // ==========================================
+    // COLORAÇÃO EXATA (branch-and-bound) COM RASTRO
+    // ==========================================
+    function generateExactSimulation(nodes, edges) {
+      const n = nodes.length;
+      if (n === 0) return [];
+
+      const idMap = new Map();
+      nodes.forEach((node, i) => idMap.set(node.id, i));
+
+      const adj = Array.from({ length: n }, () => []);
+      for (const e of edges) {
+        const u = idMap.get(e.source);
+        const v = idMap.get(e.target);
+        if (u === undefined || v === undefined || u === v) continue;
+        if (!adj[u].includes(v)) { adj[u].push(v); adj[v].push(u); }
+      }
+
+      const degrees = adj.map(neighbors => neighbors.length);
+      const maxDeg = Math.max(...degrees, 0);
+      const order = Array.from({ length: n }, (_, i) => i).sort((a, b) => adj[b].length - adj[a].length);
+      const steps = [];
+      let stepNumber = 1;
+
+      const vazio = () => nodes.map(node => ({ id: node.id, color: null }));
+
+      if (edges.length === 0) {
+        steps.push({
+          stepIndex: stepNumber++,
+          algorithm: 'Exata',
+          title: 'Número cromático exato',
+          targetNodeId: null,
+          targetNodeLabel: 'χ(G)',
+          chosenColor: null,
+          nodeColors: vazio(),
+          reasoning: 'O grafo não possui arestas: uma única cor basta para todos os vértices, logo χ(G) = 1.'
+        });
+        return steps;
+      }
+
+      // O guloso garante χ(G) ≤ Δ(G) + 1, então o laço sempre termina.
+      for (let k = 2; k <= maxDeg + 1; k++) {
+        const cores = new Array(n).fill(-1);
+        const ordemColorida = [];
+        let explorados = 0;
+
+        const backtrack = (idx) => {
+          if (explorados++ > 200000) return false;
+          if (idx === n) return true;
+          const v = order[idx];
+          const proibidas = new Set();
+          for (const u of adj[v]) if (cores[u] !== -1) proibidas.add(cores[u]);
+          for (let c = 0; c < k; c++) {
+            if (proibidas.has(c)) continue;
+            cores[v] = c;
+            ordemColorida.push(v);
+            if (backtrack(idx + 1)) return true;
+            ordemColorida.pop();
+            cores[v] = -1;
+          }
+          return false;
+        };
+
+        if (!backtrack(0)) {
+          steps.push({
+            stepIndex: stepNumber++,
+            algorithm: 'Exata',
+            title: `Tentativa com ${k} cor${k > 1 ? 'es' : ''}`,
+            targetNodeId: null,
+            targetNodeLabel: 'χ(G)',
+            chosenColor: null,
+            nodeColors: vazio(),
+            reasoning: `Busca retroativa com k = ${k} cor${k > 1 ? 'es' : ''} falhou (${explorados} nós explorados): não existe coloração própria com essa quantidade de cores. Logo χ(G) ≥ ${k + 1}.`
+          });
+          continue;
+        }
+
+        ordemColorida.forEach((v, i) => {
+          const parcial = new Array(n).fill(null);
+          for (let j = 0; j <= i; j++) parcial[ordemColorida[j]] = cores[ordemColorida[j]];
+          const cor = cores[v];
+          steps.push({
+            stepIndex: stepNumber++,
+            algorithm: 'Exata',
+            title: `Coloração ótima — vértice ${i + 1}/${ordemColorida.length}`,
+            targetNodeId: nodes[v].id,
+            targetNodeLabel: nodes[v].label,
+            chosenColor: cor,
+            forbiddenColors: [],
+            nodeColors: nodes.map((node, idx) => ({ id: node.id, color: parcial[idx] })),
+            reasoning: `Com k = ${k} cor${k > 1 ? 'es' : ''} a busca encontra uma coloração válida: o vértice '${nodes[v].label}' (grau ${degrees[v]}) recebeu ${PALETTE[cor % PALETTE.length].badge} (${PALETTE[cor % PALETTE.length].name}).`
+          });
+        });
+
+        steps.push({
+          stepIndex: stepNumber++,
+          algorithm: 'Exata',
+          title: 'Número cromático exato',
+          targetNodeId: null,
+          targetNodeLabel: 'χ(G)',
+          chosenColor: null,
+          nodeColors: nodes.map((node, idx) => ({ id: node.id, color: cores[idx] })),
+          reasoning: `Otimização concluída: χ(G) = ${k}. A coloração apresentada é ótima — nenhuma coloração própria deste grafo usa menos de ${k} cor${k > 1 ? 'es' : ''}.`
+        });
+        return steps;
+      }
+
+      return steps;
+    }
+
+    // ==========================================
+    // DICA DE COLORAÇÃO (seleção DSatur)
+    // ==========================================
+    function computeColoringHint(nodes, edges) {
+      const n = nodes.length;
+      if (n === 0) return null;
+
+      const idMap = new Map();
+      nodes.forEach((node, i) => idMap.set(node.id, i));
+
+      const adj = Array.from({ length: n }, () => []);
+      for (const e of edges) {
+        const u = idMap.get(e.source);
+        const v = idMap.get(e.target);
+        if (u === undefined || v === undefined || u === v) continue;
+        if (!adj[u].includes(v)) { adj[u].push(v); adj[v].push(u); }
+      }
+
+      const cores = nodes.map(node => (node.color === undefined ? null : node.color));
+      const degrees = adj.map(neighbors => neighbors.length);
+
+      let alvo = -1;
+      let maxSat = -1;
+      let maxUncoloredDeg = -1;
+      let maxTotalDeg = -1;
+
+      for (let v = 0; v < n; v++) {
+        if (cores[v] !== null) continue;
+        const coresVizinhas = new Set();
+        let naoColoridos = 0;
+        for (const u of adj[v]) {
+          if (cores[u] !== null) coresVizinhas.add(cores[u]);
+          else naoColoridos++;
+        }
+        const saturacao = coresVizinhas.size;
+        if (
+          saturacao > maxSat ||
+          (saturacao === maxSat && naoColoridos > maxUncoloredDeg) ||
+          (saturacao === maxSat && naoColoridos === maxUncoloredDeg && degrees[v] > maxTotalDeg) ||
+          alvo === -1
+        ) {
+          maxSat = saturacao;
+          maxUncoloredDeg = naoColoridos;
+          maxTotalDeg = degrees[v];
+          alvo = v;
+        }
+      }
+
+      if (alvo === -1) return null;
+
+      const proibidas = new Set();
+      for (const u of adj[alvo]) if (cores[u] !== null) proibidas.add(cores[u]);
+      const proibidasOrdenadas = [...proibidas].sort((a, b) => a - b);
+
+      let cor = 0;
+      while (proibidas.has(cor)) cor++;
+
+      return {
+        nodeId: nodes[alvo].id,
+        nodeLabel: nodes[alvo].label,
+        color: cor,
+        colorName: PALETTE[cor % PALETTE.length].name,
+        colorBadge: PALETTE[cor % PALETTE.length].badge,
+        forbiddenColors: proibidasOrdenadas,
+        saturationDegree: maxSat,
+        uncoloredDegree: maxUncoloredDeg,
+        totalDegree: degrees[alvo],
+        reasoning: `Pinte o vértice '${nodes[alvo].label}' com ${PALETTE[cor % PALETTE.length].badge} (${PALETTE[cor % PALETTE.length].name}). Ele é o mais saturado da cena (ρ = ${maxSat} cor(es) diferente(s) entre os vizinhos${proibidasOrdenadas.length ? `: ${proibidasOrdenadas.map(c => PALETTE[c % PALETTE.length].badge).join(', ')}` : ''}) e tem ${maxUncoloredDeg} vizinho(s) ainda sem cor.`
+      };
+    }
+
+    // ==========================================
+    // AVALIAÇÃO DE UMA COLORAÇÃO
+    // ==========================================
+    function evaluateColoring(nodes, edges, colorById) {
+      const ids = new Set(nodes.map(n => n.id));
+      let conflicts = 0;
+      for (const e of edges) {
+        if (!ids.has(e.source) || !ids.has(e.target)) continue;
+        const a = colorById.get(e.source);
+        const b = colorById.get(e.target);
+        if (a !== undefined && b !== undefined && a === null && b === null) continue;
+        if (a !== undefined && b !== undefined && a === b) conflicts++;
+      }
+      const used = new Set();
+      for (const node of nodes) {
+        const c = colorById.get(node.id);
+        if (c !== undefined && c !== null) used.add(c);
+      }
+      const colored = nodes.filter(n => {
+        const c = colorById.get(n.id);
+        return c !== undefined && c !== null;
+      }).length;
+      return {
+        coresUsadas: used.size,
+        conflitos: conflicts,
+        valida: conflicts === 0,
+        verticesColoridos: colored,
+        completo: colored === nodes.length
+      };
+    }
+
+    // ==========================================
+    // RELATÓRIO DIDÁTICO EM MARKDOWN
+    // ==========================================
+    function buildExplainMarkdown({ nodes, edges, metrics, simulationSteps, selectedAlgorithm, currentStepIndex }) {
+      const agora = new Date();
+      const dataHora = agora.toLocaleString('pt-BR');
+      const algoritmo = SIMULATION_ALGORITHMS.find(a => a.id === selectedAlgorithm);
+      const nomeAlgoritmo = algoritmo ? algoritmo.name : selectedAlgorithm;
+
+      const classes = new Map();
+      nodes.forEach(node => {
+        if (node.color === null || node.color === undefined) return;
+        if (!classes.has(node.color)) classes.set(node.color, []);
+        classes.get(node.color).push(node.label);
+      });
+
+      const linhas = [];
+      linhas.push('# Relatório de Coloração — Simulador de Grafos Cromáticos');
+      linhas.push('');
+      linhas.push(`_Gerado em ${dataHora}_`);
+      linhas.push('');
+      linhas.push('## 1. Grafo atual');
+      linhas.push('');
+      linhas.push('| Métrica | Valor |');
+      linhas.push('| --- | --- |');
+      linhas.push(`| Vértices (\\|V\\|) | ${metrics.n} |`);
+      linhas.push(`| Arestas (\\|E\\|) | ${metrics.m} |`);
+      linhas.push(`| Grau máximo (Δ) | ${metrics.maxDeg} |`);
+      linhas.push(`| Grau mínimo (δ) | ${metrics.minDeg} |`);
+      linhas.push(`| Grau médio | ${metrics.avgDeg} |`);
+      linhas.push(`| Densidade | ${metrics.density} |`);
+      linhas.push(`| Maior clique (ω) | ${metrics.omega} |`);
+      linhas.push(`| Número cromático exato (χ) | ${metrics.chi} |`);
+      linhas.push(`| Bipartido | ${metrics.isBipartite ? 'sim' : 'não'} |`);
+      if (metrics.oddCycle) linhas.push(`| Ciclo ímpar | ${metrics.oddCycle.join(' → ')} |`);
+      linhas.push('');
+      linhas.push(`Leitura: ω ≤ χ ≤ Δ+1 → ${metrics.omega} ≤ ${metrics.chi} ≤ ${metrics.maxDeg + 1}.`);
+      if (metrics.chi === metrics.omega) {
+        linhas.push('Como χ = ω, existe uma clique que já exige todas as cores: nenhuma coloração pode usar menos.');
+      } else if (metrics.chi < metrics.maxDeg + 1) {
+        const folgaCores = metrics.maxDeg + 1 - metrics.chi;
+        linhas.push(`Como χ < Δ+1, há folga: ${folgaCores === 1 ? 'existe 1 cor' : `existem ${folgaCores} cores`} abaixo do pior caso guloso.`);
+      }
+      linhas.push('');
+
+      linhas.push('## 2. Coloração atual');
+      linhas.push('');
+      linhas.push(`- Cores usadas: **${metrics.usedColorsCount}**`);
+      linhas.push(`- Conflitos: **${metrics.conflicts.length}**`);
+      linhas.push(`- Coloração válida: ${metrics.isValidColoring ? 'sim' : 'não'}`);
+      if (classes.size > 0) {
+        linhas.push('');
+        linhas.push('### Classes de cor');
+        linhas.push('');
+        [...classes.entries()].sort((a, b) => a[0] - b[0]).forEach(([cor, vertices]) => {
+          linhas.push(`- **${PALETTE[cor % PALETTE.length].badge} · ${PALETTE[cor % PALETTE.length].name}**: ${vertices.join(', ')}`);
+        });
+      }
+      linhas.push('');
+
+      linhas.push(`## 3. Simulação — ${nomeAlgoritmo}`);
+      linhas.push('');
+      if (simulationSteps.length === 0) {
+        linhas.push('_Nenhuma simulação executada ainda. Selecione um algoritmo e rode o passo a passo para gerar a justificativa de cada decisão._');
+      } else {
+        const executados = currentStepIndex >= 0 ? currentStepIndex + 1 : simulationSteps.length;
+        linhas.push(`_Passos exibidos: ${executados} de ${simulationSteps.length}._`);
+        linhas.push('');
+        simulationSteps.slice(0, executados).forEach(step => {
+          const alvo = step.title
+            ? step.title
+            : `Vértice '${step.targetNodeLabel}'`;
+          const cor = step.chosenColor === null || step.chosenColor === undefined
+            ? null
+            : PALETTE[step.chosenColor % PALETTE.length].badge;
+          linhas.push(`${step.stepIndex}. **${alvo}**${cor ? ` → ${cor}` : ''} — ${step.reasoning}`);
+        });
+        if (executados < simulationSteps.length) {
+          linhas.push('');
+          linhas.push(`_Faltam ${simulationSteps.length - executados} passos para completar a simulação._`);
+        }
+      }
+      linhas.push('');
+
+      linhas.push('## 4. Conclusões');
+      linhas.push('');
+      const folga = metrics.usedColorsCount - metrics.chi;
+      if (metrics.usedColorsCount === 0) {
+        linhas.push('- Nenhuma cor atribuída: o grafo ainda está sem coloração.');
+      } else if (folga === 0) {
+        linhas.push(`- A coloração atual usa **${metrics.usedColorsCount}** cor(es) e χ(G) = ${metrics.chi}: a coloração é **ótima**.`);
+      } else {
+        linhas.push(`- A coloração atual usa **${metrics.usedColorsCount}** cor(es) contra o ótimo χ(G) = ${metrics.chi}: folga de **${folga}** cor(es).`);
+      }
+      if (metrics.isBipartite) {
+        linhas.push('- O grafo é bipartido, logo χ(G) ≤ 2: nenhuma coloração precisa de mais que duas cores.');
+      }
+      if (metrics.chi >= 3) {
+        linhas.push('- Como χ(G) ≥ 3, decidir se o grafo é 2-colorível é um problema NP-completo (Karp, 1972).');
+      }
+      linhas.push('');
+
+      return linhas.join('\n');
+    }
+
     // Auto-organização física (Fruchterman-Reingold / Spring Embedder)
     function applyForceDirectedLayout(nodes, edges, width, height, iterations = 85) {
       if (nodes.length <= 1) return nodes;
@@ -1069,6 +1396,12 @@
       const [showTheoryModal, setShowTheoryModal] = useState(false);
       const [showRandomModal, setShowRandomModal] = useState(false);
       const [showLanModal, setShowLanModal] = useState(false);
+      const [showExplainModal, setShowExplainModal] = useState(false);
+      const [explainCopied, setExplainCopied] = useState(false);
+      const [showCompareModal, setShowCompareModal] = useState(false);
+      const [compareResult, setCompareResult] = useState(null);
+      const [compareRunning, setCompareRunning] = useState(false);
+      const [hint, setHint] = useState(null);
       const [randomN, setRandomN] = useState(8);
       const [randomP, setRandomP] = useState(0.35);
 
@@ -1094,6 +1427,90 @@
       const metrics = useMemo(() => {
         return analyzeGraphStructure(nodes, edges);
       }, [nodes, edges]);
+
+      // A dica vale para o estado atual do grafo: some quando algo muda.
+      useEffect(() => {
+        setHint(null);
+      }, [nodes]);
+
+      const explainMarkdown = useMemo(() => {
+        return buildExplainMarkdown({
+          nodes,
+          edges,
+          metrics,
+          simulationSteps,
+          selectedAlgorithm,
+          currentStepIndex
+        });
+      }, [nodes, edges, metrics, simulationSteps, selectedAlgorithm, currentStepIndex]);
+
+      const handleCopyExplain = async () => {
+        try {
+          await navigator.clipboard.writeText(explainMarkdown);
+        } catch (e) {
+          const area = document.createElement('textarea');
+          area.value = explainMarkdown;
+          area.style.position = 'fixed';
+          area.style.opacity = '0';
+          document.body.appendChild(area);
+          area.select();
+          try { document.execCommand('copy'); } catch (e2) { /* clipboard indisponível */ }
+          document.body.removeChild(area);
+        }
+        setExplainCopied(true);
+        setTimeout(() => setExplainCopied(false), 2000);
+      };
+
+      const handleGiveHint = () => {
+        const dica = computeColoringHint(nodes, edges);
+        setHint(dica);
+        if (dica) SoundEngine.playPop();
+      };
+
+      const handleDownloadExplain = () => {
+        const blob = new Blob([explainMarkdown], { type: 'text/markdown;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'relatorio-coloracao.md';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      };
+
+      const runComparison = () => {
+        setShowCompareModal(true);
+        setCompareRunning(true);
+
+        const resultados = SIMULATION_ALGORITHMS.map(algo => {
+          const t0 = performance.now();
+          const steps = generateStepsFor(algo.id);
+          const tempoMs = performance.now() - t0;
+          const ultimo = steps.length ? steps[steps.length - 1].nodeColors : [];
+          const colorById = new Map(ultimo.map(c => [c.id, c.color]));
+          const avaliacao = evaluateColoring(nodes, edges, colorById);
+          return {
+            id: algo.id,
+            nome: algo.name,
+            tag: algo.tag,
+            passos: steps.length,
+            tempoMs,
+            ...avaliacao
+          };
+        });
+
+        const otimo = metrics.chi;
+        const melhores = resultados.filter(r => r.coresUsadas === otimo);
+        setCompareResult({
+          resultados,
+          otimo,
+          melhores: melhores.map(r => r.id),
+          todosOtimos: melhores.length === resultados.length,
+          maxCores: Math.max(...resultados.map(r => r.coresUsadas), 1)
+        });
+        setCompareRunning(false);
+      };
 
       // Loop de Física Contínua
       useEffect(() => {
@@ -1209,7 +1626,9 @@
                     const match = step.nodeColors.find(sc => sc.id === n.id);
                     return match ? { ...n, color: match.color } : n;
                   }));
-                  SoundEngine.playColorNote(step.chosenColor);
+                  if (step.chosenColor !== null && step.chosenColor !== undefined) {
+                    SoundEngine.playColorNote(step.chosenColor);
+                  }
                 }
                 return next;
               } else {
@@ -1303,14 +1722,17 @@
         setCurrentStepIndex(-1);
       };
 
+      const generateStepsFor = (algoKey) => {
+        if (algoKey === 'dsatur') return generateDsaturSimulation(nodes, edges);
+        if (algoKey === 'welsh-powell') return generateWelshPowellSimulation(nodes, edges);
+        if (algoKey === 'greedy') return generateGreedySimulation(nodes, edges);
+        if (algoKey === 'exact') return generateExactSimulation(nodes, edges);
+        return generateDsaturSimulation(nodes, edges);
+      };
+
       const handlePrepareSimulation = (algoKey = selectedAlgorithm) => {
         setIsPlaying(false);
-        let steps = [];
-
-        if (algoKey === 'dsatur') steps = generateDsaturSimulation(nodes, edges);
-        else if (algoKey === 'welsh-powell') steps = generateWelshPowellSimulation(nodes, edges);
-        else if (algoKey === 'greedy') steps = generateGreedySimulation(nodes, edges);
-        else steps = generateDsaturSimulation(nodes, edges);
+        const steps = generateStepsFor(algoKey);
 
         setSimulationSteps(steps);
         if (steps.length > 0) {
@@ -1320,16 +1742,14 @@
             const match = firstStep.nodeColors.find(sc => sc.id === n.id);
             return match ? { ...n, color: match.color } : { ...n, color: null };
           }));
-          SoundEngine.playColorNote(firstStep.chosenColor);
+          if (firstStep.chosenColor !== null && firstStep.chosenColor !== undefined) {
+            SoundEngine.playColorNote(firstStep.chosenColor);
+          }
         }
       };
 
       const handleRunInstant = (algoKey = selectedAlgorithm) => {
-        let steps = [];
-        if (algoKey === 'dsatur') steps = generateDsaturSimulation(nodes, edges);
-        else if (algoKey === 'welsh-powell') steps = generateWelshPowellSimulation(nodes, edges);
-        else if (algoKey === 'greedy') steps = generateGreedySimulation(nodes, edges);
-        else steps = generateDsaturSimulation(nodes, edges);
+        const steps = generateStepsFor(algoKey);
 
         setSimulationSteps(steps);
         if (steps.length > 0) {
@@ -1356,7 +1776,9 @@
             const match = step.nodeColors.find(sc => sc.id === n.id);
             return match ? { ...n, color: match.color } : n;
           }));
-          SoundEngine.playColorNote(step.chosenColor);
+          if (step.chosenColor !== null && step.chosenColor !== undefined) {
+            SoundEngine.playColorNote(step.chosenColor);
+          }
         }
       };
 
@@ -2132,6 +2554,37 @@
                         🎉 PARABÉNS! Você atingiu o Número Cromático Ótimo!
                       </div>
                     )}
+
+                    <button
+                      onClick={handleGiveHint}
+                      className="mt-2.5 w-full py-1.5 rounded-lg bg-amber-950/50 hover:bg-amber-900/50 border border-amber-500/40 text-amber-300 text-[11px] font-bold flex items-center justify-center gap-1.5 transition"
+                      title="Sugere o próximo vértice a colorir e a cor viável, com a justificativa (seleção DSatur)"
+                    >
+                      <Icons.Sparkles /> Pedir Dica
+                    </button>
+
+                    {hint && (
+                      <div className="mt-2 p-2.5 bg-amber-950/40 border border-amber-500/40 rounded-lg text-[11px] text-amber-200">
+                        <p className="leading-relaxed">{hint.reasoning}</p>
+                        {hint.forbiddenColors.length > 0 && (
+                          <div className="mt-1.5 flex items-center gap-1.5">
+                            <span className="text-[10px] text-amber-400/80">Cores bloqueadas:</span>
+                            {hint.forbiddenColors.map(c => (
+                              <span
+                                key={c}
+                                className="w-4 h-4 rounded text-[9px] font-bold flex items-center justify-center font-mono"
+                                style={{
+                                  backgroundColor: PALETTE[c % PALETTE.length].hex,
+                                  color: PALETTE[c % PALETTE.length].text
+                                }}
+                              >
+                                {PALETTE[c % PALETTE.length].badge}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <p className="text-[11px] text-slate-400">
@@ -2147,12 +2600,7 @@
                 </span>
 
                 <div className="flex flex-col gap-1.5 mb-3">
-                  {[
-                    { id: 'dsatur', name: 'DSatur (Brélaz)', tag: 'Mais Eficiente', desc: 'Prioriza vértices com maior saturação de cores' },
-                    { id: 'welsh-powell', name: 'Welsh-Powell', tag: 'Por Graus', desc: 'Ordena vértices por grau decrescente' },
-                    { id: 'greedy', name: 'Guloso Sequencial', tag: 'First-Fit', desc: 'Processa vértices na ordem natural' },
-                    { id: 'exact', name: 'Coloração Exata', tag: 'Ótimo χ', desc: 'Branch-and-bound garantindo o menor χ(G)' }
-                  ].map(algo => (
+                  {SIMULATION_ALGORITHMS.map(algo => (
                     <button
                       key={algo.id}
                       onClick={() => {
@@ -2247,18 +2695,20 @@
                       <div className="flex items-center gap-1.5">
                         <span className="w-2.5 h-2.5 rounded-full bg-teal-400 animate-ping"></span>
                         <span className="font-bold text-teal-300 font-mono">
-                          Passo {currentStep.stepIndex}: Vértice '{currentStep.targetNodeLabel}'
+                          Passo {currentStep.stepIndex}: {currentStep.title ? currentStep.title : `Vértice '${currentStep.targetNodeLabel}'`}
                         </span>
                       </div>
-                      <span
-                        className="px-2 py-0.5 rounded text-[10px] font-extrabold font-mono"
-                        style={{
-                          backgroundColor: PALETTE[currentStep.chosenColor % PALETTE.length].hex,
-                          color: PALETTE[currentStep.chosenColor % PALETTE.length].text
-                        }}
-                      >
-                        {PALETTE[currentStep.chosenColor % PALETTE.length].badge}
-                      </span>
+                      {currentStep.chosenColor !== null && currentStep.chosenColor !== undefined && (
+                        <span
+                          className="px-2 py-0.5 rounded text-[10px] font-extrabold font-mono"
+                          style={{
+                            backgroundColor: PALETTE[currentStep.chosenColor % PALETTE.length].hex,
+                            color: PALETTE[currentStep.chosenColor % PALETTE.length].text
+                          }}
+                        >
+                          {PALETTE[currentStep.chosenColor % PALETTE.length].badge}
+                        </span>
+                      )}
                     </div>
 
                     <p className="text-slate-300 leading-relaxed text-[11px] mb-2">
@@ -2290,6 +2740,23 @@
                     Selecione um algoritmo e clique em <strong className="text-slate-400">Próximo Passo</strong> ou <strong className="text-slate-400">Play</strong> para simular passo a passo.
                   </div>
                 )}
+
+                <div className="mt-3 grid grid-cols-2 gap-1.5">
+                  <button
+                    onClick={() => { setExplainCopied(false); setShowExplainModal(true); }}
+                    className="py-2 rounded-xl bg-teal-950/50 hover:bg-teal-900/50 border border-teal-500/40 text-teal-300 text-[11px] font-bold flex items-center justify-center gap-1.5 transition"
+                    title="Gera um relatório Markdown com invariantes, classes de cor e a justificativa de cada passo"
+                  >
+                    <Icons.BookOpen /> Explicação
+                  </button>
+                  <button
+                    onClick={runComparison}
+                    className="py-2 rounded-xl bg-indigo-950/50 hover:bg-indigo-900/50 border border-indigo-500/40 text-indigo-300 text-[11px] font-bold flex items-center justify-center gap-1.5 transition"
+                    title="Roda os quatro algoritmos no mesmo grafo e compara cores usadas, validade e tempo"
+                  >
+                    <Icons.Zap /> Comparar
+                  </button>
+                </div>
               </div>
 
               {/* PRESETS */}
@@ -2528,6 +2995,7 @@
                     {/* VÉRTICES COM MOTION SUAVE */}
                     {nodes.map(node => {
                       const isCurrentStepTarget = currentStep && currentStep.targetNodeId === node.id;
+                      const isHintTarget = hint && hint.nodeId === node.id;
                       const isInspected = inspectedNode && inspectedNode.id === node.id;
                       const isEdgeSource = edgeStartNodeId === node.id;
                       const isOddCycleNode = highlightOddCycle && metrics.oddCycle && metrics.oddCycle.includes(node.id);
@@ -2591,6 +3059,18 @@
                             />
                           )}
 
+                          {/* Destaque da Dica */}
+                          {isHintTarget && (
+                            <circle
+                              r="32"
+                              fill="none"
+                              stroke="#fbbf24"
+                              strokeWidth="3"
+                              strokeDasharray="6 4"
+                              className="node-pulse-active"
+                            />
+                          )}
+
                           {/* Corpo Principal do Nó */}
                           <circle
                             r={isTableHoveredNode ? "22" : "20"}
@@ -2598,6 +3078,8 @@
                             stroke={
                               isCurrentStepTarget
                                 ? '#14b8a6'
+                                : isHintTarget
+                                ? '#fbbf24'
                                 : isTableHoveredNode
                                 ? '#06b6d4'
                                 : isInspected || isEdgeSource
@@ -2608,9 +3090,9 @@
                                 ? 'rgba(255,255,255,0.3)'
                                 : '#334460'
                             }
-                            strokeWidth={isCurrentStepTarget || isInspected || isEdgeSource || isTableHoveredNode ? "3.5" : "2"}
+                            strokeWidth={isCurrentStepTarget || isHintTarget || isInspected || isEdgeSource || isTableHoveredNode ? "3.5" : "2"}
                             className="transition-all duration-200"
-                            filter={isCurrentStepTarget ? "url(#glow-active)" : isTableHoveredNode ? "url(#glow-cyan)" : undefined}
+                            filter={isCurrentStepTarget ? 'url(#glow-active)' : isHintTarget ? 'url(#glow-gold)' : isTableHoveredNode ? 'url(#glow-cyan)' : undefined}
                           />
 
                           {/* Rótulo */}
@@ -3355,6 +3837,165 @@
                   >
                     Entendi! Voltar ao Simulador
                   </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MODAL: COMPARATIVO DE ALGORITMOS */}
+          {showCompareModal && (
+            <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-dark-900 border border-slate-700 w-full max-w-2xl max-h-[85vh] rounded-2xl flex flex-col shadow-2xl overflow-hidden">
+                <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold">
+                      ⚡
+                    </div>
+                    <div>
+                      <h3 className="font-extrabold text-base text-white">Comparativo de Algoritmos</h3>
+                      <p className="text-xs text-slate-400">
+                        Os quatro algoritmos sobre o mesmo grafo — |V| = {metrics.n}, |E| = {metrics.m}, χ = {metrics.chi}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowCompareModal(false)}
+                    className="w-8 h-8 rounded-lg text-slate-400 hover:text-white transition"
+                    title="Fechar"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="p-4 overflow-y-auto space-y-3">
+                  {compareRunning && (
+                    <div className="text-center text-slate-400 text-xs py-6">Executando os quatro algoritmos…</div>
+                  )}
+
+                  {!compareRunning && compareResult && (
+                    <>
+                      {compareResult.todosOtimos ? (
+                        <div className="p-3 rounded-xl border border-emerald-500/40 bg-emerald-950/40 text-emerald-300 text-xs">
+                          ✅ <strong>Todos os algoritmos atingiram o ótimo</strong>: χ(G) = {compareResult.otimo} cores. Neste
+                          grafo as heurísticas acertaram por acaso — a diferença entre elas aparece no custo, não no resultado.
+                        </div>
+                      ) : (
+                        <div className="p-3 rounded-xl border border-amber-500/40 bg-amber-950/40 text-amber-300 text-xs">
+                          ⚠️ Só <strong>{compareResult.melhores.length} de {compareResult.resultados.length}</strong> algoritmos
+                          atingiram o ótimo (χ = {compareResult.otimo}). Os demais usaram cores extras — é a folga da heurística.
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        {compareResult.resultados.map(r => {
+                          const pct = Math.round((r.coresUsadas / compareResult.maxCores) * 100);
+                          const otimo = r.coresUsadas === compareResult.otimo;
+                          return (
+                            <div key={r.id} className="bg-dark-950 border border-slate-800 rounded-xl p-3">
+                              <div className="flex items-center justify-between mb-1.5">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="text-xs font-bold text-slate-200 truncate">{r.nome}</span>
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-dark-850 font-mono text-slate-400 border border-slate-700/60">
+                                    {r.tag}
+                                  </span>
+                                </div>
+                                <span className={`text-xs font-extrabold font-mono shrink-0 ${otimo ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                  {r.coresUsadas} cor{r.coresUsadas > 1 ? 'es' : ''}
+                                  {otimo ? ' · ótimo' : ` · +${r.coresUsadas - compareResult.otimo}`}
+                                </span>
+                              </div>
+                              <div className="h-2 rounded-full bg-dark-900 overflow-hidden mb-1.5">
+                                <div
+                                  className={`h-full rounded-full ${otimo ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                                  style={{ width: `${pct}%` }}
+                                ></div>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500 font-mono">
+                                <span>passos: {r.passos}</span>
+                                <span>tempo: {r.tempoMs.toFixed(2)} ms</span>
+                                <span>conflitos: {r.conflitos}</span>
+                                <span>vértices coloridos: {r.verticesColoridos}/{metrics.n}</span>
+                                <span className={r.valida ? 'text-emerald-500' : 'text-rose-500'}>
+                                  {r.valida ? 'coloração válida' : 'coloração inválida'}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <p className="text-[10px] text-slate-500 leading-relaxed">
+                        Leitura: a barra mostra o número de cores em relação ao pior resultado da rodada. O número de passos da
+                        coloração exata inclui as tentativas com k cores que falharam — é o preço da garantia de otimalidade.
+                      </p>
+                    </>
+                  )}
+                </div>
+
+                <div className="p-4 border-t border-slate-800 bg-dark-950 flex items-center justify-between gap-2 flex-wrap">
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    {compareResult ? `${compareResult.resultados.length} algoritmos · χ = ${compareResult.otimo}` : ''}
+                  </span>
+                  <button
+                    onClick={() => setShowCompareModal(false)}
+                    className="px-3 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-white text-[11px] font-bold transition"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MODAL: EXPLICAÇÃO EM MARKDOWN */}
+          {showExplainModal && (
+            <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-dark-900 border border-slate-700 w-full max-w-3xl max-h-[85vh] rounded-2xl flex flex-col shadow-2xl overflow-hidden">
+                <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-teal-500/20 text-teal-400 flex items-center justify-center font-bold">
+                      χ
+                    </div>
+                    <div>
+                      <h3 className="font-extrabold text-base text-white">Explicação em Markdown</h3>
+                      <p className="text-xs text-slate-400">Invariantes, classes de cor e a justificativa de cada passo</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowExplainModal(false)}
+                    className="w-8 h-8 rounded-lg text-slate-400 hover:text-white transition"
+                    title="Fechar"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="p-4 overflow-y-auto">
+                  <pre className="text-[11px] font-mono text-slate-300 bg-dark-950 border border-slate-800 rounded-xl p-3 whitespace-pre-wrap break-words">{explainMarkdown}</pre>
+                </div>
+
+                <div className="p-4 border-t border-slate-800 bg-dark-950 flex items-center justify-between gap-2 flex-wrap">
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    {explainMarkdown.split('\n').length} linhas · {explainMarkdown.length} caracteres
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleDownloadExplain}
+                      className="px-3 py-1.5 rounded-lg bg-dark-850 hover:bg-dark-800 border border-slate-700 text-slate-300 text-[11px] font-bold transition"
+                    >
+                      Baixar .md
+                    </button>
+                    <button
+                      onClick={handleCopyExplain}
+                      className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition ${
+                        explainCopied
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-teal-500 hover:bg-teal-400 text-white'
+                      }`}
+                    >
+                      {explainCopied ? 'Copiado!' : 'Copiar Markdown'}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
