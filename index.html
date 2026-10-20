@@ -1,0 +1,3491 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulador de Grafos Cromáticos | Coloração, Heurísticas & Editor Interativo de Tabelas</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            dark: {
+              950: '#07090e',
+              900: '#0c1017',
+              850: '#111722',
+              800: '#17202f',
+              700: '#222f44',
+              600: '#334460'
+            },
+            accent: {
+              teal: '#14b8a6',
+              cyan: '#06b6d4',
+              violet: '#8b5cf6',
+              amber: '#f59e0b',
+              rose: '#f43f5e'
+            }
+          },
+          animation: {
+            'pulse-fast': 'pulse 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'dash': 'dash 1.5s linear infinite',
+            'glow': 'glow 2s ease-in-out infinite alternate',
+            'pop-in': 'popIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards',
+          },
+          keyframes: {
+            dash: {
+              to: { strokeDashoffset: '-24' }
+            },
+            glow: {
+              '0%': { filter: 'drop-shadow(0 0 4px rgba(239, 68, 68, 0.6))' },
+              '100%': { filter: 'drop-shadow(0 0 12px rgba(239, 68, 68, 0.9))' }
+            },
+            popIn: {
+              '0%': { transform: 'scale(0.3)', opacity: '0' },
+              '80%': { transform: 'scale(1.15)', opacity: '1' },
+              '100%': { transform: 'scale(1)', opacity: '1' }
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- React 18 & ReactDOM CDN -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <!-- Babel Standalone para transpilação JSX em tempo real -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Canvas Confetti para comemorações no modo desafio -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+
+  <!-- Estilos customizados e scrollbars finas -->
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      background-color: #07090e;
+      color: #e2e8f0;
+      overflow: hidden;
+    }
+
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Custom thin scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(71, 85, 105, 0.6);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(100, 116, 139, 0.8);
+    }
+
+    /* Pattern background for canvas */
+    .canvas-grid {
+      background-image: radial-gradient(rgba(148, 163, 184, 0.12) 1.2px, transparent 1.2px);
+      background-size: 24px 24px;
+    }
+
+    .glass-panel {
+      background: rgba(12, 16, 23, 0.86);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    /* Animated dash for conflicted edges */
+    .edge-conflict {
+      stroke: #ef4444;
+      stroke-width: 3.5;
+      stroke-dasharray: 6 6;
+      animation: dash 1s linear infinite, glow 1.5s ease-in-out infinite alternate;
+    }
+
+    /* Odd cycle highlight */
+    .edge-odd-cycle {
+      stroke: #f59e0b;
+      stroke-width: 4;
+      stroke-dasharray: 8 4;
+      animation: dash 1.2s linear infinite;
+      filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.7));
+    }
+
+    /* Ghost edge preview on table hover */
+    .edge-ghost-preview {
+      stroke: #06b6d4;
+      stroke-width: 2.5;
+      stroke-dasharray: 5 5;
+      animation: dash 0.8s linear infinite;
+      filter: drop-shadow(0 0 6px rgba(6, 182, 212, 0.7));
+    }
+
+    /* Node pulse during simulation */
+    .node-pulse-active {
+      animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    }
+
+    @keyframes pulse-ring {
+      0% {
+        transform: scale(0.95);
+        opacity: 0.8;
+      }
+      50% {
+        transform: scale(1.3);
+        opacity: 0.2;
+      }
+      100% {
+        transform: scale(1.4);
+        opacity: 0;
+      }
+    }
+
+    /* SVG Smooth Motion Transitions */
+    .svg-node-group {
+      transition: transform 0.4s cubic-bezier(0.34, 1.45, 0.64, 1);
+    }
+    .svg-edge-line {
+      transition: stroke 0.3s ease, stroke-width 0.3s ease, opacity 0.3s ease;
+    }
+
+    /* Matrix interactive button */
+    .matrix-cell-btn {
+      transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .matrix-cell-btn:active {
+      transform: scale(0.85);
+    }
+  </style>
+</head>
+<body class="bg-dark-950 text-slate-100 h-screen w-screen flex flex-col antialiased">
+  <div id="root" class="h-full w-full flex flex-col"></div>
+
+  <!-- Script da aplicação React -->
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+    // ==========================================
+    // PALETA DE CORES CROMÁTICAS ACCESSIBLE (14 CORES)
+    // ==========================================
+    const PALETTE = [
+      { id: 0,  badge: 'C1',  name: 'Esmeralda',  hex: '#10b981', text: '#ffffff', glow: 'rgba(16, 185, 129, 0.5)' },
+      { id: 1,  badge: 'C2',  name: 'Safira',     hex: '#3b82f6', text: '#ffffff', glow: 'rgba(59, 130, 246, 0.5)' },
+      { id: 2,  badge: 'C3',  name: 'Âmbar',      hex: '#f59e0b', text: '#000000', glow: 'rgba(245, 158, 11, 0.5)' },
+      { id: 3,  badge: 'C4',  name: 'Magenta',    hex: '#ec4899', text: '#ffffff', glow: 'rgba(236, 72, 153, 0.5)' },
+      { id: 4,  badge: 'C5',  name: 'Violeta',    hex: '#8b5cf6', text: '#ffffff', glow: 'rgba(139, 92, 246, 0.5)' },
+      { id: 5,  badge: 'C6',  name: 'Ciano',      hex: '#06b6d4', text: '#000000', glow: 'rgba(6, 182, 212, 0.5)' },
+      { id: 6,  badge: 'C7',  name: 'Coral',      hex: '#ef4444', text: '#ffffff', glow: 'rgba(239, 68, 68, 0.5)' },
+      { id: 7,  badge: 'C8',  name: 'Lima',       hex: '#84cc16', text: '#000000', glow: 'rgba(132, 204, 22, 0.5)' },
+      { id: 8,  badge: 'C9',  name: 'Tangerina',  hex: '#f97316', text: '#ffffff', glow: 'rgba(249, 115, 22, 0.5)' },
+      { id: 9,  badge: 'C10', name: 'Índigo',     hex: '#6366f1', text: '#ffffff', glow: 'rgba(99, 102, 241, 0.5)' },
+      { id: 10, badge: 'C11', name: 'Turquesa',  hex: '#14b8a6', text: '#ffffff', glow: 'rgba(20, 184, 166, 0.5)' },
+      { id: 11, badge: 'C12', name: 'Rosa Choque', hex: '#f43f5e', text: '#ffffff', glow: 'rgba(244, 63, 94, 0.5)' },
+      { id: 12, badge: 'C13', name: 'Ouro',      hex: '#eab308', text: '#000000', glow: 'rgba(234, 179, 8, 0.5)' },
+      { id: 13, badge: 'C14', name: 'Ardósia',   hex: '#64748b', text: '#ffffff', glow: 'rgba(100, 116, 139, 0.5)' }
+    ];
+
+    // Escala pentatônica harmônica
+    const PENTATONIC_FREQS = [
+      261.63, 293.66, 329.63, 392.00, 440.00,
+      523.25, 587.33, 659.25, 783.99, 880.00,
+      1046.50, 1174.66, 1318.51, 1567.98
+    ];
+
+    // Motor de Síntese de Áudio Web Audio API
+    const SoundEngine = {
+      enabled: true,
+      ctx: null,
+      getCtx() {
+        if (!this.ctx) {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (AudioContextClass) this.ctx = new AudioContextClass();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+        return this.ctx;
+      },
+      playColorNote(colorId) {
+        if (!this.enabled) return;
+        try {
+          const ctx = this.getCtx();
+          if (!ctx) return;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          const freq = PENTATONIC_FREQS[colorId % PENTATONIC_FREQS.length] || 440;
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, ctx.currentTime);
+          gain.gain.setValueAtTime(0.08, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.3);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.3);
+        } catch (e) {}
+      },
+      playPop() {
+        if (!this.enabled) return;
+        try {
+          const ctx = this.getCtx();
+          if (!ctx) return;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(560, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(140, ctx.currentTime + 0.08);
+          gain.gain.setValueAtTime(0.09, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.08);
+        } catch (e) {}
+      },
+      playConflict() {
+        if (!this.enabled) return;
+        try {
+          const ctx = this.getCtx();
+          if (!ctx) return;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(140, ctx.currentTime);
+          osc.frequency.linearRampToValueAtTime(100, ctx.currentTime + 0.22);
+          gain.gain.setValueAtTime(0.08, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.22);
+        } catch (e) {}
+      },
+      playVictory() {
+        if (!this.enabled) return;
+        try {
+          const ctx = this.getCtx();
+          if (!ctx) return;
+          const notes = [523.25, 659.25, 783.99, 1046.5];
+          notes.forEach((freq, i) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.09);
+            gain.gain.setValueAtTime(0.09, ctx.currentTime + i * 0.09);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.09 + 0.5);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(ctx.currentTime + i * 0.09);
+            osc.stop(ctx.currentTime + i * 0.09 + 0.5);
+          });
+        } catch (e) {}
+      }
+    };
+
+    // ==========================================
+    // ÍCONES SVG INLINE
+    // ==========================================
+    const Icons = {
+      Play: () => <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>,
+      Pause: () => <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>,
+      StepForward: () => <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>,
+      StepBack: () => <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>,
+      RotateCcw: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a5 5 0 015 5v2M3 10l4-4M3 10l4 4"/></svg>,
+      Zap: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
+      Move: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M12 2v20M2 12h20"/></svg>,
+      Plus: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
+      Link: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>,
+      Trash: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>,
+      Palette: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path strokeLinecap="round" strokeLinejoin="round" d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 011.668-1.668h1.996c3.051 0 5.563-2.512 5.563-5.563C22 6.5 17.5 2 12 2z"/></svg>,
+      Eraser: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M18 13l-5.5 5.5a2.121 2.121 0 01-3 0L3.5 12.5a2.121 2.121 0 010-3L10.5 2.5a2.121 2.121 0 013 0L19 8a2.121 2.121 0 010 3zM2 20h20"/></svg>,
+      Sparkles: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.286L13 21l-2.286-6.857L5 12l5.714-2.286L13 3z"/></svg>,
+      BookOpen: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>,
+      ZoomIn: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>,
+      ZoomOut: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>,
+      Maximize: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>,
+      AlertTriangle: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>,
+      CheckCircle: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>,
+      Download: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>,
+      Upload: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>,
+      Trophy: () => <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M19 5h-2V3H7v2H5c-1.1 0-2 .9-2 2v1c0 2.55 1.92 4.63 4.39 4.94.63 1.5 1.98 2.63 3.61 2.96V19H7v2h10v-2h-4v-3.1c1.63-.33 2.98-1.46 3.61-2.96C19.08 12.63 21 10.55 21 8V7c0-1.1-.9-2-2-2zM5 8V7h2v3.82C5.84 10.4 5 9.3 5 8zm14 0c0 1.3-.84 2.4-2 2.82V7h2v1z"/></svg>,
+      Shuffle: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>,
+      Volume2: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>,
+      VolumeX: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>,
+      Share2: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>,
+      Flame: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"/></svg>,
+      Grid: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>,
+      Table: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M3 14h18m-9-4v8m-7 4h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>,
+      ChevronUp: () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7"/></svg>,
+      ChevronDown: () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/></svg>,
+      Edit3: () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+    };
+
+    // ==========================================
+    // PRESETS DE GRAFOS CLÁSSICOS
+    // ==========================================
+    const GRAPH_PRESETS = {
+      petersen: {
+        name: "Grafo de Petersen",
+        desc: "10 vértices, 15 arestas. Livre de 3-ciclos, não-planar, χ = 3.",
+        generate: (cx = 440, cy = 290) => {
+          const nodes = [];
+          const edges = [];
+          const rOuter = 160;
+          const rInner = 80;
+          for (let i = 0; i < 5; i++) {
+            const angle = (i * 72 - 90) * (Math.PI / 180);
+            nodes.push({ id: `v_o${i}`, label: `O${i+1}`, x: Math.round(cx + rOuter * Math.cos(angle)), y: Math.round(cy + rOuter * Math.sin(angle)), color: null });
+          }
+          for (let i = 0; i < 5; i++) {
+            const angle = (i * 72 - 90) * (Math.PI / 180);
+            nodes.push({ id: `v_i${i}`, label: `I${i+1}`, x: Math.round(cx + rInner * Math.cos(angle)), y: Math.round(cy + rInner * Math.sin(angle)), color: null });
+          }
+          for (let i = 0; i < 5; i++) {
+            edges.push({ id: `e_o_${i}`, source: `v_o${i}`, target: `v_o${(i + 1) % 5}` });
+            edges.push({ id: `e_s_${i}`, source: `v_o${i}`, target: `v_i${i}` });
+            edges.push({ id: `e_i_${i}`, source: `v_i${i}`, target: `v_i${((i + 2) % 5)}` });
+          }
+          return { nodes, edges };
+        }
+      },
+      grotzsch: {
+        name: "Grafo de Grötzsch",
+        desc: "11 vértices, 20 arestas. O menor grafo livre de triângulos com χ = 4.",
+        generate: (cx = 440, cy = 290) => {
+          const nodes = [];
+          const edges = [];
+          const rOuter = 175;
+          const rInner = 90;
+          for (let i = 0; i < 5; i++) {
+            const angle = (i * 72 - 90) * (Math.PI / 180);
+            nodes.push({ id: `g_c${i}`, label: `C${i+1}`, x: Math.round(cx + rOuter * Math.cos(angle)), y: Math.round(cy + rOuter * Math.sin(angle)), color: null });
+          }
+          for (let i = 0; i < 5; i++) {
+            const angle = (i * 72 - 90 + 36) * (Math.PI / 180);
+            nodes.push({ id: `g_s${i}`, label: `S${i+1}`, x: Math.round(cx + rInner * Math.cos(angle)), y: Math.round(cy + rInner * Math.sin(angle)), color: null });
+          }
+          nodes.push({ id: `g_apex`, label: `A`, x: cx, y: cy, color: null });
+
+          for (let i = 0; i < 5; i++) {
+            edges.push({ id: `e_c_${i}`, source: `g_c${i}`, target: `g_c${(i + 1) % 5}` });
+          }
+          for (let i = 0; i < 5; i++) {
+            const prev = (i - 1 + 5) % 5;
+            const next = (i + 1) % 5;
+            edges.push({ id: `e_s1_${i}`, source: `g_s${i}`, target: `g_c${prev}` });
+            edges.push({ id: `e_s2_${i}`, source: `g_s${i}`, target: `g_c${next}` });
+            edges.push({ id: `e_apex_${i}`, source: `g_apex`, target: `g_s${i}` });
+          }
+          return { nodes, edges };
+        }
+      },
+      k5: {
+        name: "Grafo Completo K5",
+        desc: "5 vértices, todos conectados entre si (10 arestas). χ = 5.",
+        generate: (cx = 440, cy = 290) => {
+          const nodes = [];
+          const edges = [];
+          const r = 150;
+          for (let i = 0; i < 5; i++) {
+            const angle = (i * 72 - 90) * (Math.PI / 180);
+            nodes.push({ id: `k5_${i}`, label: `K${i+1}`, x: Math.round(cx + r * Math.cos(angle)), y: Math.round(cy + r * Math.sin(angle)), color: null });
+          }
+          let edgeCount = 0;
+          for (let i = 0; i < 5; i++) {
+            for (let j = i + 1; j < 5; j++) {
+              edges.push({ id: `e_k5_${edgeCount++}`, source: `k5_${i}`, target: `k5_${j}` });
+            }
+          }
+          return { nodes, edges };
+        }
+      },
+      k33: {
+        name: "Bipartido Completo K3,3",
+        desc: "Grafo de utilidades. Bipartido perfeito, 2-colorível (χ = 2).",
+        generate: (cx = 440, cy = 290) => {
+          const nodes = [];
+          const edges = [];
+          const leftX = cx - 140;
+          const rightX = cx + 140;
+          const yOffsets = [-120, 0, 120];
+
+          for (let i = 0; i < 3; i++) {
+            nodes.push({ id: `k33_l${i}`, label: `A${i+1}`, x: leftX, y: cy + yOffsets[i], color: null });
+            nodes.push({ id: `k33_r${i}`, label: `B${i+1}`, x: rightX, y: cy + yOffsets[i], color: null });
+          }
+          let edgeCount = 0;
+          for (let i = 0; i < 3; i++) {
+            for (let j = 0; j < 3; j++) {
+              edges.push({ id: `e_k33_${edgeCount++}`, source: `k33_l${i}`, target: `k33_r${j}` });
+            }
+          }
+          return { nodes, edges };
+        }
+      },
+      cycle5: {
+        name: "Ciclo Ímpar C5",
+        desc: "Pentágono simples. Exige χ = 3.",
+        generate: (cx = 440, cy = 290) => {
+          const nodes = [];
+          const edges = [];
+          const r = 145;
+          for (let i = 0; i < 5; i++) {
+            const angle = (i * 72 - 90) * (Math.PI / 180);
+            nodes.push({ id: `c5_${i}`, label: `V${i+1}`, x: Math.round(cx + r * Math.cos(angle)), y: Math.round(cy + r * Math.sin(angle)), color: null });
+          }
+          for (let i = 0; i < 5; i++) {
+            edges.push({ id: `e_c5_${i}`, source: `c5_${i}`, target: `c5_${(i + 1) % 5}` });
+          }
+          return { nodes, edges };
+        }
+      },
+      cube: {
+        name: "Grafo Cubo Q3",
+        desc: "8 vértices, 12 arestas. Bipartido (χ = 2).",
+        generate: (cx = 440, cy = 290) => {
+          const nodes = [];
+          const edges = [];
+          const s1 = 125;
+          const s2 = 60;
+          const outer = [
+            { id: 'cb_o0', label: '000', x: cx - s1, y: cy - s1 },
+            { id: 'cb_o1', label: '001', x: cx + s1, y: cy - s1 },
+            { id: 'cb_o2', label: '011', x: cx + s1, y: cy + s1 },
+            { id: 'cb_o3', label: '010', x: cx - s1, y: cy + s1 },
+          ];
+          const inner = [
+            { id: 'cb_i0', label: '100', x: cx - s2, y: cy - s2 },
+            { id: 'cb_i1', label: '101', x: cx + s2, y: cy - s2 },
+            { id: 'cb_i2', label: '111', x: cx + s2, y: cy + s2 },
+            { id: 'cb_i3', label: '110', x: cx - s2, y: cy + s2 },
+          ];
+          outer.forEach(n => nodes.push({ ...n, color: null }));
+          inner.forEach(n => nodes.push({ ...n, color: null }));
+
+          for (let i = 0; i < 4; i++) {
+            edges.push({ id: `e_cb_o${i}`, source: outer[i].id, target: outer[(i + 1) % 4].id });
+            edges.push({ id: `e_cb_i${i}`, source: inner[i].id, target: inner[(i + 1) % 4].id });
+            edges.push({ id: `e_cb_c${i}`, source: outer[i].id, target: inner[i].id });
+          }
+          return { nodes, edges };
+        }
+      }
+    };
+
+    // ==========================================
+    // MOTORES DE ANÁLISE MATEMÁTICA
+    // ==========================================
+    function analyzeGraphStructure(nodes, edges) {
+      const n = nodes.length;
+      if (n === 0) {
+        return {
+          n: 0, m: 0, maxDeg: 0, minDeg: 0, avgDeg: 0, density: 0,
+          omega: 0, chi: 0, isBipartite: true, oddCycle: null,
+          conflicts: [], usedColorsCount: 0, isValidColoring: true
+        };
+      }
+
+      const idMap = new Map();
+      nodes.forEach((node, i) => idMap.set(node.id, i));
+
+      const adj = Array.from({ length: n }, () => []);
+      for (const e of edges) {
+        const u = idMap.get(e.source);
+        const v = idMap.get(e.target);
+        if (u !== undefined && v !== undefined && u !== v) {
+          if (!adj[u].includes(v)) {
+            adj[u].push(v);
+            adj[v].push(u);
+          }
+        }
+      }
+
+      const degrees = adj.map(neighbors => neighbors.length);
+      const maxDeg = Math.max(...degrees, 0);
+      const minDeg = Math.min(...degrees, 0);
+      const avgDeg = (degrees.reduce((a, b) => a + b, 0) / n).toFixed(2);
+      const density = n > 1 ? ((2 * edges.length) / (n * (n - 1))).toFixed(3) : 0;
+
+      // Clique (Bron-Kerbosch)
+      let maxClique = 0;
+      let bkIterations = 0;
+      function bronKerbosch(R, P, X) {
+        if (bkIterations++ > 25000) return;
+        if (P.length === 0 && X.length === 0) {
+          if (R.length > maxClique) maxClique = R.length;
+          return;
+        }
+        const pivot = [...P, ...X][0];
+        const neighborsPivot = new Set(adj[pivot] || []);
+        const candidates = P.filter(v => !neighborsPivot.has(v));
+
+        for (const v of candidates) {
+          const vAdj = new Set(adj[v] || []);
+          bronKerbosch(
+            [...R, v],
+            P.filter(u => vAdj.has(u)),
+            X.filter(u => vAdj.has(u))
+          );
+          P = P.filter(u => u !== v);
+          X.push(v);
+        }
+      }
+      bronKerbosch([], Array.from({ length: n }, (_, i) => i), []);
+
+      // Bipartição & Ciclo Ímpar
+      const bipColor = new Array(n).fill(-1);
+      const parent = new Array(n).fill(-1);
+      let isBipartite = true;
+      let oddCycleIds = null;
+
+      for (let start = 0; start < n; start++) {
+        if (bipColor[start] !== -1) continue;
+        bipColor[start] = 0;
+        const queue = [start];
+
+        while (queue.length > 0) {
+          const u = queue.shift();
+          for (const v of adj[u]) {
+            if (bipColor[v] === -1) {
+              bipColor[v] = 1 - bipColor[u];
+              parent[v] = u;
+              queue.push(v);
+            } else if (bipColor[v] === bipColor[u]) {
+              isBipartite = false;
+              if (!oddCycleIds) {
+                const pathU = [u];
+                let curr = u;
+                while (curr !== start && parent[curr] !== -1) {
+                  curr = parent[curr];
+                  pathU.push(curr);
+                }
+                const pathV = [v];
+                curr = v;
+                while (curr !== start && parent[curr] !== -1) {
+                  curr = parent[curr];
+                  pathV.push(curr);
+                }
+                const setU = new Set(pathU);
+                let lca = -1;
+                for (const node of pathV) {
+                  if (setU.has(node)) {
+                    lca = node;
+                    break;
+                  }
+                }
+                const cycle = [];
+                for (const node of pathU) {
+                  cycle.push(node);
+                  if (node === lca) break;
+                }
+                const vRev = [];
+                for (const node of pathV) {
+                  if (node === lca) break;
+                  vRev.push(node);
+                }
+                vRev.reverse();
+                cycle.push(...vRev);
+                oddCycleIds = cycle.map(idx => nodes[idx].id);
+              }
+            }
+          }
+        }
+      }
+
+      // Número Cromático Exato
+      let exactChi = 1;
+      if (edges.length === 0) {
+        exactChi = 1;
+      } else if (isBipartite) {
+        exactChi = 2;
+      } else {
+        const order = Array.from({ length: n }, (_, i) => i)
+          .sort((a, b) => adj[b].length - adj[a].length);
+
+        let found = false;
+        for (let k = Math.max(3, maxClique); k <= maxDeg + 1; k++) {
+          let testSteps = 0;
+          const testColor = new Array(n).fill(-1);
+
+          function backtrack(idx) {
+            if (testSteps++ > 40000) return false;
+            if (idx === n) return true;
+            const v = order[idx];
+            const forbidden = new Set();
+            for (const u of adj[v]) {
+              if (testColor[u] !== -1) forbidden.add(testColor[u]);
+            }
+            for (let c = 0; c < k; c++) {
+              if (!forbidden.has(c)) {
+                testColor[v] = c;
+                if (backtrack(idx + 1)) return true;
+                testColor[v] = -1;
+              }
+            }
+            return false;
+          }
+
+          if (backtrack(0)) {
+            exactChi = k;
+            found = true;
+            break;
+          }
+        }
+        if (!found) exactChi = maxDeg + 1;
+      }
+
+      // Conflitos
+      const conflicts = [];
+      for (const e of edges) {
+        const uNode = nodes.find(n => n.id === e.source);
+        const vNode = nodes.find(n => n.id === e.target);
+        if (uNode && vNode && uNode.color !== null && vNode.color !== null) {
+          if (uNode.color === vNode.color) {
+            conflicts.push(e.id);
+          }
+        }
+      }
+
+      const assignedColors = new Set(nodes.map(n => n.color).filter(c => c !== null));
+      const allColored = nodes.every(n => n.color !== null);
+      const isValidColoring = allColored && conflicts.length === 0;
+
+      return {
+        n, m: edges.length, maxDeg, minDeg, avgDeg, density,
+        omega: maxClique, chi: exactChi, isBipartite, oddCycle: oddCycleIds,
+        conflicts, usedColorsCount: assignedColors.size, isValidColoring, allColored
+      };
+    }
+
+    // Heurística DSatur
+    function generateDsaturSimulation(nodes, edges) {
+      const n = nodes.length;
+      if (n === 0) return [];
+
+      const idMap = new Map();
+      nodes.forEach((node, i) => idMap.set(node.id, i));
+
+      const adj = Array.from({ length: n }, () => []);
+      for (const e of edges) {
+        const u = idMap.get(e.source);
+        const v = idMap.get(e.target);
+        if (u !== undefined && v !== undefined && u !== v) {
+          if (!adj[u].includes(v)) {
+            adj[u].push(v);
+            adj[v].push(u);
+          }
+        }
+      }
+
+      const degrees = adj.map(neighbors => neighbors.length);
+      const colors = new Array(n).fill(null);
+      const steps = [];
+
+      for (let step = 0; step < n; step++) {
+        let bestV = -1;
+        let maxSat = -1;
+        let maxUncoloredDeg = -1;
+        let maxTotalDeg = -1;
+
+        for (let v = 0; v < n; v++) {
+          if (colors[v] !== null) continue;
+
+          const neighborColors = new Set();
+          let uncoloredDeg = 0;
+          for (const u of adj[v]) {
+            if (colors[u] !== null) {
+              neighborColors.add(colors[u]);
+            } else {
+              uncoloredDeg++;
+            }
+          }
+          const sat = neighborColors.size;
+
+          if (
+            sat > maxSat ||
+            (sat === maxSat && uncoloredDeg > maxUncoloredDeg) ||
+            (sat === maxSat && uncoloredDeg === maxUncoloredDeg && degrees[v] > maxTotalDeg) ||
+            bestV === -1
+          ) {
+            maxSat = sat;
+            maxUncoloredDeg = uncoloredDeg;
+            maxTotalDeg = degrees[v];
+            bestV = v;
+          }
+        }
+
+        const neighborDetails = [];
+        const forbidden = new Set();
+        for (const u of adj[bestV]) {
+          if (colors[u] !== null) {
+            forbidden.add(colors[u]);
+            neighborDetails.push({ id: nodes[u].id, label: nodes[u].label, color: colors[u] });
+          }
+        }
+
+        let chosenColor = 0;
+        while (forbidden.has(chosenColor)) chosenColor++;
+        colors[bestV] = chosenColor;
+
+        steps.push({
+          stepIndex: step + 1,
+          algorithm: 'DSatur',
+          targetNodeId: nodes[bestV].id,
+          targetNodeLabel: nodes[bestV].label,
+          chosenColor,
+          saturationDegree: maxSat,
+          totalDegree: degrees[bestV],
+          forbiddenColors: Array.from(forbidden).sort((a,b)=>a-b),
+          neighborDetails,
+          reasoning: `Selecionado vértice '${nodes[bestV].label}' com maior Grau de Saturação (ρ = ${maxSat}) e ${maxUncoloredDeg} vizinhos não-coloridos. Cores vizinhas: [${Array.from(forbidden).map(c => PALETTE[c % PALETTE.length].badge).join(', ') || 'Nenhuma'}]. Menor cor viável: ${PALETTE[chosenColor % PALETTE.length].badge} (${PALETTE[chosenColor % PALETTE.length].name}).`,
+          nodeColors: nodes.map((node, i) => ({ id: node.id, color: colors[i] }))
+        });
+      }
+
+      return steps;
+    }
+
+    // Heurística Welsh-Powell
+    function generateWelshPowellSimulation(nodes, edges) {
+      const n = nodes.length;
+      if (n === 0) return [];
+
+      const idMap = new Map();
+      nodes.forEach((node, i) => idMap.set(node.id, i));
+
+      const adj = Array.from({ length: n }, () => []);
+      for (const e of edges) {
+        const u = idMap.get(e.source);
+        const v = idMap.get(e.target);
+        if (u !== undefined && v !== undefined && u !== v) {
+          if (!adj[u].includes(v)) {
+            adj[u].push(v);
+            adj[v].push(u);
+          }
+        }
+      }
+
+      const degrees = adj.map(neighbors => neighbors.length);
+      const sortedIndices = Array.from({ length: n }, (_, i) => i)
+        .sort((a, b) => degrees[b] - degrees[a]);
+
+      const colors = new Array(n).fill(null);
+      const steps = [];
+      let currentColor = 0;
+      let coloredCount = 0;
+      let stepNumber = 1;
+
+      while (coloredCount < n) {
+        for (const v of sortedIndices) {
+          if (colors[v] !== null) continue;
+
+          const hasConflict = adj[v].some(u => colors[u] === currentColor);
+          if (!hasConflict) {
+            colors[v] = currentColor;
+            coloredCount++;
+
+            steps.push({
+              stepIndex: stepNumber++,
+              algorithm: 'Welsh-Powell',
+              targetNodeId: nodes[v].id,
+              targetNodeLabel: nodes[v].label,
+              chosenColor: currentColor,
+              totalDegree: degrees[v],
+              passIndex: currentColor + 1,
+              reasoning: `Varredura para cor ${PALETTE[currentColor % PALETTE.length].badge} (${PALETTE[currentColor % PALETTE.length].name}): Vértice '${nodes[v].label}' (grau d = ${degrees[v]}) não possui conflito com os nós coloridos nesta rodada. Atribuída cor ${PALETTE[currentColor % PALETTE.length].badge}.`,
+              nodeColors: nodes.map((node, i) => ({ id: node.id, color: colors[i] }))
+            });
+          }
+        }
+        currentColor++;
+      }
+
+      return steps;
+    }
+
+    // Guloso Sequencial
+    function generateGreedySimulation(nodes, edges) {
+      const n = nodes.length;
+      if (n === 0) return [];
+
+      const idMap = new Map();
+      nodes.forEach((node, i) => idMap.set(node.id, i));
+
+      const adj = Array.from({ length: n }, () => []);
+      for (const e of edges) {
+        const u = idMap.get(e.source);
+        const v = idMap.get(e.target);
+        if (u !== undefined && v !== undefined && u !== v) {
+          if (!adj[u].includes(v)) {
+            adj[u].push(v);
+            adj[v].push(u);
+          }
+        }
+      }
+
+      const colors = new Array(n).fill(null);
+      const steps = [];
+
+      for (let i = 0; i < n; i++) {
+        const forbidden = new Set();
+        const neighborDetails = [];
+        for (const u of adj[i]) {
+          if (colors[u] !== null) {
+            forbidden.add(colors[u]);
+            neighborDetails.push({ id: nodes[u].id, label: nodes[u].label, color: colors[u] });
+          }
+        }
+
+        let chosenColor = 0;
+        while (forbidden.has(chosenColor)) chosenColor++;
+        colors[i] = chosenColor;
+
+        steps.push({
+          stepIndex: i + 1,
+          algorithm: 'Guloso (First-Fit)',
+          targetNodeId: nodes[i].id,
+          targetNodeLabel: nodes[i].label,
+          chosenColor,
+          forbiddenColors: Array.from(forbidden).sort((a,b)=>a-b),
+          neighborDetails,
+          reasoning: `Processando vértice sequencial '${nodes[i].label}' (índice ${i+1}/${n}). Cores bloqueadas pelos vizinhos: [${Array.from(forbidden).map(c => PALETTE[c % PALETTE.length].badge).join(', ') || 'Nenhuma'}]. Menor cor disponível: ${PALETTE[chosenColor % PALETTE.length].badge}.`,
+          nodeColors: nodes.map((node, idx) => ({ id: node.id, color: colors[idx] }))
+        });
+      }
+
+      return steps;
+    }
+
+    // Auto-organização física (Fruchterman-Reingold / Spring Embedder)
+    function applyForceDirectedLayout(nodes, edges, width, height, iterations = 85) {
+      if (nodes.length <= 1) return nodes;
+      const k = Math.sqrt((width * height) / nodes.length) * 0.72;
+      const positions = nodes.map(n => ({ x: n.x, y: n.y, vx: 0, vy: 0 }));
+      const idMap = new Map();
+      nodes.forEach((n, i) => idMap.set(n.id, i));
+
+      for (let iter = 0; iter < iterations; iter++) {
+        const temp = (1 - iter / iterations) * 25;
+
+        for (let i = 0; i < nodes.length; i++) {
+          for (let j = i + 1; j < nodes.length; j++) {
+            let dx = positions[i].x - positions[j].x;
+            let dy = positions[i].y - positions[j].y;
+            let dist = Math.sqrt(dx * dx + dy * dy) || 1;
+            if (dist > 350) continue;
+            let force = (k * k) / dist;
+            let fx = (dx / dist) * force;
+            let fy = (dy / dist) * force;
+            positions[i].vx += fx;
+            positions[i].vy += fy;
+            positions[j].vx -= fx;
+            positions[j].vy -= fy;
+          }
+        }
+
+        for (const e of edges) {
+          const i = idMap.get(e.source);
+          const j = idMap.get(e.target);
+          if (i === undefined || j === undefined) continue;
+
+          let dx = positions[i].x - positions[j].x;
+          let dy = positions[i].y - positions[j].y;
+          let dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          let force = (dist * dist) / k;
+          let fx = (dx / dist) * force;
+          let fy = (dy / dist) * force;
+          positions[i].vx -= fx;
+          positions[i].vy -= fy;
+          positions[j].vx += fx;
+          positions[j].vy += fy;
+        }
+
+        const cx = width / 2;
+        const cy = height / 2;
+        for (let i = 0; i < nodes.length; i++) {
+          let dx = cx - positions[i].x;
+          let dy = cy - positions[i].y;
+          positions[i].vx += dx * 0.035;
+          positions[i].vy += dy * 0.035;
+
+          let speed = Math.sqrt(positions[i].vx * positions[i].vx + positions[i].vy * positions[i].vy) || 1;
+          let step = Math.min(speed, temp);
+          positions[i].x += (positions[i].vx / speed) * step;
+          positions[i].y += (positions[i].vy / speed) * step;
+          positions[i].vx = 0;
+          positions[i].vy = 0;
+
+          positions[i].x = Math.max(70, Math.min(width - 70, positions[i].x));
+          positions[i].y = Math.max(70, Math.min(height - 70, positions[i].y));
+        }
+      }
+
+      return nodes.map((node, i) => ({
+        ...node,
+        x: Math.round(positions[i].x),
+        y: Math.round(positions[i].y)
+      }));
+    }
+
+    // Relaxação Animada com Motion Suave
+    function animateGraphRelaxation(currentNodes, currentEdges, setNodesCallback) {
+      if (currentNodes.length <= 1) return;
+      const w = 920;
+      const h = 600;
+      let frame = 0;
+      const totalFrames = 22;
+
+      let animPositions = currentNodes.map(n => ({ x: n.x, y: n.y, vx: 0, vy: 0 }));
+      const idMap = new Map();
+      currentNodes.forEach((n, i) => idMap.set(n.id, i));
+
+      function step() {
+        frame++;
+        const temp = (1 - frame / totalFrames) * 18;
+        const k = Math.sqrt((w * h) / Math.max(1, currentNodes.length)) * 0.70;
+
+        for (let i = 0; i < currentNodes.length; i++) {
+          for (let j = i + 1; j < currentNodes.length; j++) {
+            let dx = animPositions[i].x - animPositions[j].x;
+            let dy = animPositions[i].y - animPositions[j].y;
+            let dist = Math.sqrt(dx * dx + dy * dy) || 1;
+            if (dist > 340) continue;
+            let force = (k * k) / dist;
+            let fx = (dx / dist) * force * 0.05;
+            let fy = (dy / dist) * force * 0.05;
+            animPositions[i].vx += fx;
+            animPositions[i].vy += fy;
+            animPositions[j].vx -= fx;
+            animPositions[j].vy -= fy;
+          }
+        }
+
+        for (const e of currentEdges) {
+          const i = idMap.get(e.source);
+          const j = idMap.get(e.target);
+          if (i === undefined || j === undefined) continue;
+          let dx = animPositions[i].x - animPositions[j].x;
+          let dy = animPositions[i].y - animPositions[j].y;
+          let dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          let force = (dist * dist) / k;
+          let fx = (dx / dist) * force * 0.028;
+          let fy = (dy / dist) * force * 0.028;
+          animPositions[i].vx -= fx;
+          animPositions[i].vy -= fy;
+          animPositions[j].vx += fx;
+          animPositions[j].vy += fy;
+        }
+
+        const cx = w / 2;
+        const cy = h / 2;
+        for (let i = 0; i < currentNodes.length; i++) {
+          animPositions[i].vx += (cx - animPositions[i].x) * 0.015;
+          animPositions[i].vy += (cy - animPositions[i].y) * 0.015;
+
+          let speed = Math.sqrt(animPositions[i].vx * animPositions[i].vx + animPositions[i].vy * animPositions[i].vy) || 1;
+          let stepSize = Math.min(speed, temp);
+          animPositions[i].x += (animPositions[i].vx / speed) * stepSize;
+          animPositions[i].y += (animPositions[i].vy / speed) * stepSize;
+          animPositions[i].vx *= 0.5;
+          animPositions[i].vy *= 0.5;
+
+          animPositions[i].x = Math.max(60, Math.min(w - 60, animPositions[i].x));
+          animPositions[i].y = Math.max(60, Math.min(h - 60, animPositions[i].y));
+        }
+
+        setNodesCallback(prev => prev.map((n, idx) => ({
+          ...n,
+          x: Math.round(animPositions[idx].x),
+          y: Math.round(animPositions[idx].y)
+        })));
+
+        if (frame < totalFrames) {
+          requestAnimationFrame(step);
+        }
+      }
+
+      requestAnimationFrame(step);
+    }
+
+    // ==========================================
+    // COMPONENTE PRINCIPAL DO SIMULADOR
+    // ==========================================
+    function ChromaticGraphSimulator() {
+      const [nodes, setNodes] = useState(() => GRAPH_PRESETS.petersen.generate(460, 290).nodes);
+      const [edges, setEdges] = useState(() => GRAPH_PRESETS.petersen.generate(460, 290).edges);
+
+      const [currentTool, setCurrentTool] = useState('select');
+      const [selectedColorId, setSelectedColorId] = useState(0);
+
+      // Câmera e Interação
+      const [edgeStartNodeId, setEdgeStartNodeId] = useState(null);
+      const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
+      const [draggingNodeId, setDraggingNodeId] = useState(null);
+      const [hoveredNodeId, setHoveredNodeId] = useState(null);
+      const [inspectingNodeId, setInspectingNodeId] = useState(null);
+
+      // Menu Rápido de Contexto
+      const [contextMenu, setContextMenu] = useState(null);
+
+      // Física Contínua & Motion
+      const [livePhysics, setLivePhysics] = useState(false);
+      const [autoMotionOnEdit, setAutoMotionOnEdit] = useState(true);
+
+      // Som
+      const [soundEnabled, setSoundEnabled] = useState(true);
+
+      const [zoom, setZoom] = useState(1);
+      const [pan, setPan] = useState({ x: 0, y: 0 });
+      const [isPanning, setIsPanning] = useState(false);
+      const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+
+      // Simulação
+      const [selectedAlgorithm, setSelectedAlgorithm] = useState('dsatur');
+      const [simulationSteps, setSimulationSteps] = useState([]);
+      const [currentStepIndex, setCurrentStepIndex] = useState(-1);
+      const [isPlaying, setIsPlaying] = useState(false);
+      const [playbackSpeed, setPlaybackSpeed] = useState(700);
+
+      const [highlightOddCycle, setHighlightOddCycle] = useState(false);
+      const [challengeMode, setChallengeMode] = useState(false);
+      const [hasTriggeredConfetti, setHasTriggeredConfetti] = useState(false);
+
+      // Modais
+      const [showTheoryModal, setShowTheoryModal] = useState(false);
+      const [showRandomModal, setShowRandomModal] = useState(false);
+      const [showLanModal, setShowLanModal] = useState(false);
+      const [randomN, setRandomN] = useState(8);
+      const [randomP, setRandomP] = useState(0.35);
+
+      // Painel Inferior de Tabelas
+      const [activeBottomTab, setActiveBottomTab] = useState('matrix'); // 'matrix' | 'edges' | 'vertices' | 'classes' | 'properties' | 'io'
+      const [tablePanelSize, setTablePanelSize] = useState('medium'); // 'compact' (160px) | 'medium' (280px) | 'large' (420px)
+
+      // Célula destacada na Matriz (Hover Bidirecional com Motion)
+      const [hoveredMatrixCell, setHoveredMatrixCell] = useState(null); // { uId, vId }
+
+      // Input da Tabela de Arestas
+      const [newEdgeSource, setNewEdgeSource] = useState('');
+      const [newEdgeTarget, setNewEdgeTarget] = useState('');
+
+      const svgRef = useRef(null);
+      const canvasContainerRef = useRef(null);
+      const stepCardRef = useRef(null);
+
+      useEffect(() => {
+        SoundEngine.enabled = soundEnabled;
+      }, [soundEnabled]);
+
+      const metrics = useMemo(() => {
+        return analyzeGraphStructure(nodes, edges);
+      }, [nodes, edges]);
+
+      // Loop de Física Contínua
+      useEffect(() => {
+        if (!livePhysics || nodes.length <= 1) return;
+        let animId;
+        const stepPhysics = () => {
+          setNodes(prevNodes => {
+            const w = 920;
+            const h = 600;
+            const k = Math.sqrt((w * h) / prevNodes.length) * 0.70;
+            const idMap = new Map();
+            prevNodes.forEach((n, i) => idMap.set(n.id, i));
+
+            const forces = prevNodes.map(() => ({ fx: 0, fy: 0 }));
+
+            for (let i = 0; i < prevNodes.length; i++) {
+              for (let j = i + 1; j < prevNodes.length; j++) {
+                let dx = prevNodes[i].x - prevNodes[j].x;
+                let dy = prevNodes[i].y - prevNodes[j].y;
+                let dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                if (dist > 320) continue;
+                let force = (k * k) / dist;
+                let fx = (dx / dist) * force * 0.04;
+                let fy = (dy / dist) * force * 0.04;
+                forces[i].fx += fx;
+                forces[i].fy += fy;
+                forces[j].fx -= fx;
+                forces[j].fy -= fy;
+              }
+            }
+
+            for (const edge of edges) {
+              const i = idMap.get(edge.source);
+              const j = idMap.get(edge.target);
+              if (i === undefined || j === undefined) continue;
+              let dx = prevNodes[i].x - prevNodes[j].x;
+              let dy = prevNodes[i].y - prevNodes[j].y;
+              let dist = Math.sqrt(dx * dx + dy * dy) || 1;
+              let force = (dist * dist) / k;
+              let fx = (dx / dist) * force * 0.025;
+              let fy = (dy / dist) * force * 0.025;
+              forces[i].fx -= fx;
+              forces[i].fy -= fy;
+              forces[j].fx += fx;
+              forces[j].fy += fy;
+            }
+
+            const cx = w / 2;
+            const cy = h / 2;
+            for (let i = 0; i < prevNodes.length; i++) {
+              if (prevNodes[i].id === draggingNodeId) continue;
+              forces[i].fx += (cx - prevNodes[i].x) * 0.006;
+              forces[i].fy += (cy - prevNodes[i].y) * 0.006;
+            }
+
+            return prevNodes.map((node, i) => {
+              if (node.id === draggingNodeId) return node;
+              const speed = Math.sqrt(forces[i].fx * forces[i].fx + forces[i].fy * forces[i].fy);
+              const cap = Math.min(speed, 5.5);
+              const factor = speed > 0 ? cap / speed : 0;
+              return {
+                ...node,
+                x: Math.max(50, Math.min(w - 50, node.x + forces[i].fx * factor)),
+                y: Math.max(50, Math.min(h - 50, node.y + forces[i].fy * factor))
+              };
+            });
+          });
+
+          animId = requestAnimationFrame(stepPhysics);
+        };
+
+        animId = requestAnimationFrame(stepPhysics);
+        return () => cancelAnimationFrame(animId);
+      }, [livePhysics, edges, draggingNodeId]);
+
+      // Comemoração no Modo Desafio
+      useEffect(() => {
+        if (challengeMode && metrics.isValidColoring && metrics.allColored) {
+          if (metrics.usedColorsCount <= metrics.chi && !hasTriggeredConfetti) {
+            setHasTriggeredConfetti(true);
+            SoundEngine.playVictory();
+            if (window.confetti) {
+              window.confetti({
+                particleCount: 140,
+                spread: 80,
+                origin: { y: 0.6 }
+              });
+            }
+          }
+        } else {
+          setHasTriggeredConfetti(false);
+        }
+      }, [challengeMode, metrics.isValidColoring, metrics.allColored, metrics.usedColorsCount, metrics.chi, hasTriggeredConfetti]);
+
+      // Alerta de conflito sonoro
+      useEffect(() => {
+        if (metrics.conflicts.length > 0) {
+          SoundEngine.playConflict();
+        }
+      }, [metrics.conflicts.length]);
+
+      // Reprodução Automática
+      useEffect(() => {
+        let interval = null;
+        if (isPlaying) {
+          interval = setInterval(() => {
+            setCurrentStepIndex(prev => {
+              if (prev < simulationSteps.length - 1) {
+                const next = prev + 1;
+                const step = simulationSteps[next];
+                if (step && step.nodeColors) {
+                  setNodes(currNodes => currNodes.map(n => {
+                    const match = step.nodeColors.find(sc => sc.id === n.id);
+                    return match ? { ...n, color: match.color } : n;
+                  }));
+                  SoundEngine.playColorNote(step.chosenColor);
+                }
+                return next;
+              } else {
+                setIsPlaying(false);
+                return prev;
+              }
+            });
+          }, playbackSpeed);
+        }
+        return () => clearInterval(interval);
+      }, [isPlaying, simulationSteps, playbackSpeed]);
+
+      // Preset Loader
+      const handleLoadPreset = (key) => {
+        const preset = GRAPH_PRESETS[key];
+        if (!preset) return;
+        const rect = canvasContainerRef.current?.getBoundingClientRect();
+        const cx = rect ? rect.width / 2 : 440;
+        const cy = rect ? rect.height / 2 : 290;
+        const generated = preset.generate(cx, cy);
+        setNodes(generated.nodes);
+        setEdges(generated.edges);
+        resetSimulationState();
+        setHighlightOddCycle(false);
+        SoundEngine.playPop();
+      };
+
+      const handleGenerateRandom = () => {
+        const rect = canvasContainerRef.current?.getBoundingClientRect();
+        const cx = rect ? rect.width / 2 : 440;
+        const cy = rect ? rect.height / 2 : 290;
+        const n = Math.max(3, Math.min(24, parseInt(randomN) || 8));
+        const p = Math.max(0.05, Math.min(0.95, parseFloat(randomP) || 0.35));
+
+        const newNodes = [];
+        const newEdges = [];
+        const radius = Math.min(cx, cy) * 0.7;
+
+        for (let i = 0; i < n; i++) {
+          const angle = (i * (360 / n) - 90) * (Math.PI / 180);
+          newNodes.push({
+            id: `rnd_${i}`,
+            label: `v${i + 1}`,
+            x: Math.round(cx + radius * Math.cos(angle)),
+            y: Math.round(cy + radius * Math.sin(angle)),
+            color: null
+          });
+        }
+
+        let edgeId = 0;
+        for (let i = 0; i < n; i++) {
+          for (let j = i + 1; j < n; j++) {
+            if (Math.random() < p) {
+              newEdges.push({
+                id: `e_rnd_${edgeId++}`,
+                source: newNodes[i].id,
+                target: newNodes[j].id
+              });
+            }
+          }
+        }
+
+        if (newEdges.length === 0 && n > 1) {
+          for (let i = 0; i < n - 1; i++) {
+            newEdges.push({ id: `e_rnd_${edgeId++}`, source: newNodes[i].id, target: newNodes[i + 1].id });
+          }
+        }
+
+        const arranged = applyForceDirectedLayout(newNodes, newEdges, cx * 2, cy * 2, 60);
+        setNodes(arranged);
+        setEdges(newEdges);
+        resetSimulationState();
+        setShowRandomModal(false);
+        SoundEngine.playPop();
+      };
+
+      const handleClearColors = () => {
+        setNodes(prev => prev.map(n => ({ ...n, color: null })));
+        resetSimulationState();
+      };
+
+      const handleClearAll = () => {
+        setNodes([]);
+        setEdges([]);
+        resetSimulationState();
+      };
+
+      const resetSimulationState = () => {
+        setIsPlaying(false);
+        setSimulationSteps([]);
+        setCurrentStepIndex(-1);
+      };
+
+      const handlePrepareSimulation = (algoKey = selectedAlgorithm) => {
+        setIsPlaying(false);
+        let steps = [];
+
+        if (algoKey === 'dsatur') steps = generateDsaturSimulation(nodes, edges);
+        else if (algoKey === 'welsh-powell') steps = generateWelshPowellSimulation(nodes, edges);
+        else if (algoKey === 'greedy') steps = generateGreedySimulation(nodes, edges);
+        else steps = generateDsaturSimulation(nodes, edges);
+
+        setSimulationSteps(steps);
+        if (steps.length > 0) {
+          setCurrentStepIndex(0);
+          const firstStep = steps[0];
+          setNodes(currNodes => currNodes.map(n => {
+            const match = firstStep.nodeColors.find(sc => sc.id === n.id);
+            return match ? { ...n, color: match.color } : { ...n, color: null };
+          }));
+          SoundEngine.playColorNote(firstStep.chosenColor);
+        }
+      };
+
+      const handleRunInstant = (algoKey = selectedAlgorithm) => {
+        let steps = [];
+        if (algoKey === 'dsatur') steps = generateDsaturSimulation(nodes, edges);
+        else if (algoKey === 'welsh-powell') steps = generateWelshPowellSimulation(nodes, edges);
+        else if (algoKey === 'greedy') steps = generateGreedySimulation(nodes, edges);
+        else steps = generateDsaturSimulation(nodes, edges);
+
+        setSimulationSteps(steps);
+        if (steps.length > 0) {
+          const lastStep = steps[steps.length - 1];
+          setCurrentStepIndex(steps.length - 1);
+          setNodes(currNodes => currNodes.map(n => {
+            const match = lastStep.nodeColors.find(sc => sc.id === n.id);
+            return match ? { ...n, color: match.color } : n;
+          }));
+          SoundEngine.playVictory();
+        }
+      };
+
+      const handleStepForward = () => {
+        if (simulationSteps.length === 0) {
+          handlePrepareSimulation();
+          return;
+        }
+        if (currentStepIndex < simulationSteps.length - 1) {
+          const next = currentStepIndex + 1;
+          setCurrentStepIndex(next);
+          const step = simulationSteps[next];
+          setNodes(currNodes => currNodes.map(n => {
+            const match = step.nodeColors.find(sc => sc.id === n.id);
+            return match ? { ...n, color: match.color } : n;
+          }));
+          SoundEngine.playColorNote(step.chosenColor);
+        }
+      };
+
+      const handleStepBack = () => {
+        if (currentStepIndex > 0) {
+          const prev = currentStepIndex - 1;
+          setCurrentStepIndex(prev);
+          const step = simulationSteps[prev];
+          setNodes(currNodes => currNodes.map(n => {
+            const match = step.nodeColors.find(sc => sc.id === n.id);
+            return match ? { ...n, color: match.color } : n;
+          }));
+          SoundEngine.playPop();
+        }
+      };
+
+      const handleAutoLayout = () => {
+        const rect = canvasContainerRef.current?.getBoundingClientRect();
+        const w = rect ? rect.width : 920;
+        const h = rect ? rect.height : 600;
+        const arranged = applyForceDirectedLayout(nodes, edges, w, h, 90);
+        setNodes(arranged);
+        SoundEngine.playPop();
+      };
+
+      // ==========================================
+      // OPERAÇÕES DO MODO DE PREENCHIMENTO DE TABELA COM MOTION
+      // ==========================================
+
+      // Alternar conexão de célula da matriz de adjacência (0 <-> 1)
+      const handleToggleMatrixCell = (uId, vId) => {
+        if (uId === vId) return; // Laços próprios desabilitados em grafos simples
+
+        const exists = edges.some(e =>
+          (e.source === uId && e.target === vId) ||
+          (e.source === vId && e.target === uId)
+        );
+
+        let updatedEdges;
+        if (exists) {
+          updatedEdges = edges.filter(e =>
+            !((e.source === uId && e.target === vId) || (e.source === vId && e.target === uId))
+          );
+          SoundEngine.playPop();
+        } else {
+          const newEdge = {
+            id: `e_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+            source: uId,
+            target: vId
+          };
+          updatedEdges = [...edges, newEdge];
+          SoundEngine.playColorNote(edges.length % PALETTE.length);
+        }
+
+        setEdges(updatedEdges);
+        resetSimulationState();
+
+        // Se motion automático estiver ativo, relaxa suavemente a posição dos nós
+        if (autoMotionOnEdit) {
+          animateGraphRelaxation(nodes, updatedEdges, setNodes);
+        }
+      };
+
+      // Adicionar novo vértice via tabela
+      const handleAddVertexFromTable = () => {
+        const rect = canvasContainerRef.current?.getBoundingClientRect();
+        const cx = rect ? rect.width / 2 : 440;
+        const cy = rect ? rect.height / 2 : 290;
+
+        const nextNum = nodes.length + 1;
+        const angle = (nextNum * 47) % 360 * (Math.PI / 180);
+        const r = 120 + ((nextNum * 23) % 80);
+
+        const newId = `v_${Date.now().toString(36)}`;
+        const newNode = {
+          id: newId,
+          label: `v${nextNum}`,
+          x: Math.round(cx + r * Math.cos(angle)),
+          y: Math.round(cy + r * Math.sin(angle)),
+          color: null
+        };
+
+        const updatedNodes = [...nodes, newNode];
+        setNodes(updatedNodes);
+        resetSimulationState();
+        SoundEngine.playPop();
+
+        if (autoMotionOnEdit) {
+          animateGraphRelaxation(updatedNodes, edges, setNodes);
+        }
+      };
+
+      // Remover vértice via tabela
+      const handleDeleteVertexFromTable = (nodeId) => {
+        const updatedNodes = nodes.filter(n => n.id !== nodeId);
+        const updatedEdges = edges.filter(e => e.source !== nodeId && e.target !== nodeId);
+        setNodes(updatedNodes);
+        setEdges(updatedEdges);
+        if (inspectingNodeId === nodeId) setInspectingNodeId(null);
+        resetSimulationState();
+        SoundEngine.playPop();
+
+        if (autoMotionOnEdit) {
+          animateGraphRelaxation(updatedNodes, updatedEdges, setNodes);
+        }
+      };
+
+      // Grafo Complementar (Inverte todos os 0s e 1s na matriz)
+      const handleComplementaryGraph = () => {
+        if (nodes.length <= 1) return;
+        const newEdges = [];
+        let edgeId = 0;
+
+        for (let i = 0; i < nodes.length; i++) {
+          for (let j = i + 1; j < nodes.length; j++) {
+            const uId = nodes[i].id;
+            const vId = nodes[j].id;
+            const hasEdge = edges.some(e =>
+              (e.source === uId && e.target === vId) ||
+              (e.source === vId && e.target === uId)
+            );
+            if (!hasEdge) {
+              newEdges.push({
+                id: `e_comp_${edgeId++}`,
+                source: uId,
+                target: vId
+              });
+            }
+          }
+        }
+
+        setEdges(newEdges);
+        resetSimulationState();
+        SoundEngine.playVictory();
+
+        if (autoMotionOnEdit) {
+          animateGraphRelaxation(nodes, newEdges, setNodes);
+        }
+      };
+
+      // Grafo Completo Kn via matriz
+      const handleCompleteGraph = () => {
+        if (nodes.length <= 1) return;
+        const newEdges = [];
+        let edgeId = 0;
+        for (let i = 0; i < nodes.length; i++) {
+          for (let j = i + 1; j < nodes.length; j++) {
+            newEdges.push({
+              id: `e_k_${edgeId++}`,
+              source: nodes[i].id,
+              target: nodes[j].id
+            });
+          }
+        }
+        setEdges(newEdges);
+        resetSimulationState();
+        SoundEngine.playVictory();
+
+        if (autoMotionOnEdit) {
+          animateGraphRelaxation(nodes, newEdges, setNodes);
+        }
+      };
+
+      // Zerar todas as arestas da matriz (Grafo Nulo)
+      const handleClearMatrix = () => {
+        setEdges([]);
+        resetSimulationState();
+        SoundEngine.playPop();
+      };
+
+      // Adicionar aresta manualmente pela tabela de arestas
+      const handleAddEdgeFromTable = () => {
+        if (!newEdgeSource || !newEdgeTarget || newEdgeSource === newEdgeTarget) return;
+        const exists = edges.some(e =>
+          (e.source === newEdgeSource && e.target === newEdgeTarget) ||
+          (e.source === newEdgeTarget && e.target === newEdgeSource)
+        );
+        if (!exists) {
+          const newEdge = {
+            id: `e_tbl_${Date.now().toString(36)}`,
+            source: newEdgeSource,
+            target: newEdgeTarget
+          };
+          const updatedEdges = [...edges, newEdge];
+          setEdges(updatedEdges);
+          resetSimulationState();
+          SoundEngine.playPop();
+          if (autoMotionOnEdit) {
+            animateGraphRelaxation(nodes, updatedEdges, setNodes);
+          }
+        }
+      };
+
+      // Canvas Coordenadas
+      const getSvgCoordinates = useCallback((clientX, clientY) => {
+        if (!svgRef.current) return { x: 0, y: 0 };
+        const rect = svgRef.current.getBoundingClientRect();
+        const rawX = clientX - rect.left;
+        const rawY = clientY - rect.top;
+        return {
+          x: (rawX - pan.x) / zoom,
+          y: (rawY - pan.y) / zoom
+        };
+      }, [pan, zoom]);
+
+      const handleCanvasMouseDown = (e) => {
+        setContextMenu(null);
+        if (e.button === 1 || e.altKey) {
+          setIsPanning(true);
+          setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+          return;
+        }
+
+        const coords = getSvgCoordinates(e.clientX, e.clientY);
+
+        if (currentTool === 'addNode') {
+          const newId = `v_${Date.now().toString(36)}`;
+          const nextNumber = nodes.length + 1;
+          const newNode = {
+            id: newId,
+            label: `v${nextNumber}`,
+            x: Math.round(coords.x),
+            y: Math.round(coords.y),
+            color: null
+          };
+          const updatedNodes = [...nodes, newNode];
+          setNodes(updatedNodes);
+          resetSimulationState();
+          SoundEngine.playPop();
+          if (autoMotionOnEdit) {
+            animateGraphRelaxation(updatedNodes, edges, setNodes);
+          }
+        } else if (currentTool === 'select') {
+          setIsPanning(true);
+          setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+        }
+      };
+
+      const handleCanvasMouseMove = (e) => {
+        const coords = getSvgCoordinates(e.clientX, e.clientY);
+        setCursorPos(coords);
+
+        if (isPanning) {
+          setPan({
+            x: e.clientX - panStart.x,
+            y: e.clientY - panStart.y
+          });
+          return;
+        }
+
+        if (draggingNodeId) {
+          setNodes(prev => prev.map(n => {
+            if (n.id === draggingNodeId) {
+              return { ...n, x: Math.round(coords.x), y: Math.round(coords.y) };
+            }
+            return n;
+          }));
+        }
+      };
+
+      const handleCanvasMouseUp = () => {
+        setIsPanning(false);
+        setDraggingNodeId(null);
+      };
+
+      const handleWheel = (e) => {
+        e.preventDefault();
+        const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+        const newZoom = Math.min(3.0, Math.max(0.3, zoom * zoomFactor));
+
+        if (!svgRef.current) return;
+        const rect = svgRef.current.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        const newPanX = mouseX - (mouseX - pan.x) * (newZoom / zoom);
+        const newPanY = mouseY - (mouseY - pan.y) * (newZoom / zoom);
+
+        setZoom(newZoom);
+        setPan({ x: newPanX, y: newPanY });
+      };
+
+      const handleResetZoom = () => {
+        setZoom(1);
+        setPan({ x: 0, y: 0 });
+      };
+
+      const handleFitView = () => {
+        if (nodes.length === 0) {
+          handleResetZoom();
+          return;
+        }
+        const minX = Math.min(...nodes.map(n => n.x));
+        const maxX = Math.max(...nodes.map(n => n.x));
+        const minY = Math.min(...nodes.map(n => n.y));
+        const maxY = Math.max(...nodes.map(n => n.y));
+
+        const rect = canvasContainerRef.current?.getBoundingClientRect();
+        const w = rect ? rect.width : 920;
+        const h = rect ? rect.height : 600;
+
+        const graphW = maxX - minX + 120;
+        const graphH = maxY - minY + 120;
+        const fitScale = Math.min(2.0, Math.max(0.4, Math.min(w / graphW, h / graphH) * 0.88));
+
+        const centerX = (minX + maxX) / 2;
+        const centerY = (minY + maxY) / 2;
+
+        setZoom(fitScale);
+        setPan({
+          x: w / 2 - centerX * fitScale,
+          y: h / 2 - centerY * fitScale
+        });
+      };
+
+      const handleNodeClick = (e, node) => {
+        e.stopPropagation();
+        setContextMenu(null);
+
+        if (currentTool === 'remove') {
+          handleDeleteVertexFromTable(node.id);
+        } else if (currentTool === 'paint') {
+          setNodes(prev => prev.map(n => n.id === node.id ? { ...n, color: selectedColorId } : n));
+          if (selectedColorId !== null) SoundEngine.playColorNote(selectedColorId);
+          else SoundEngine.playPop();
+        } else if (currentTool === 'addEdge') {
+          if (!edgeStartNodeId) {
+            setEdgeStartNodeId(node.id);
+            SoundEngine.playPop();
+          } else if (edgeStartNodeId === node.id) {
+            setEdgeStartNodeId(null);
+          } else {
+            handleToggleMatrixCell(edgeStartNodeId, node.id);
+            setEdgeStartNodeId(null);
+          }
+        } else if (currentTool === 'select') {
+          setInspectingNodeId(node.id === inspectingNodeId ? null : node.id);
+        }
+      };
+
+      const handleNodeDoubleClick = (e, node) => {
+        e.stopPropagation();
+        const nextColor = node.color === null ? 0 : (node.color + 1 < PALETTE.length ? node.color + 1 : null);
+        setNodes(prev => prev.map(n => n.id === node.id ? { ...n, color: nextColor } : n));
+        if (nextColor !== null) SoundEngine.playColorNote(nextColor);
+        else SoundEngine.playPop();
+      };
+
+      const handleNodeContextMenu = (e, node) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setContextMenu({
+          nodeId: node.id,
+          x: e.clientX,
+          y: e.clientY
+        });
+      };
+
+      const handleEdgeClick = (e, edge) => {
+        e.stopPropagation();
+        setContextMenu(null);
+        if (currentTool === 'remove') {
+          setEdges(prev => prev.filter(ed => ed.id !== edge.id));
+          resetSimulationState();
+          SoundEngine.playPop();
+        }
+      };
+
+      const handleExportJSON = () => {
+        const data = {
+          name: "Grafo Cromático",
+          timestamp: new Date().toISOString(),
+          nodes: nodes.map(({ id, label, x, y, color }) => ({ id, label, x, y, color })),
+          edges: edges.map(({ id, source, target }) => ({ id, source, target }))
+        };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `grafo_cromatico_${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+
+      const handleImportJSON = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const data = JSON.parse(event.target.result);
+            if (Array.isArray(data.nodes) && Array.isArray(data.edges)) {
+              setNodes(data.nodes);
+              setEdges(data.edges);
+              resetSimulationState();
+              SoundEngine.playPop();
+            } else {
+              alert("Formato de arquivo JSON inválido!");
+            }
+          } catch (err) {
+            alert("Erro ao ler JSON: " + err.message);
+          }
+        };
+        reader.readAsText(file);
+      };
+
+      const handleExportSVG = () => {
+        if (!svgRef.current) return;
+        const svgData = new XMLSerializer().serializeToString(svgRef.current);
+        const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `grafo_cromatico_${Date.now()}.svg`;
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+
+      const inspectedNode = useMemo(() => {
+        if (!inspectingNodeId) return null;
+        const node = nodes.find(n => n.id === inspectingNodeId);
+        if (!node) return null;
+
+        const neighborEdges = edges.filter(e => e.source === node.id || e.target === node.id);
+        const neighborNodeIds = neighborEdges.map(e => e.source === node.id ? e.target : e.source);
+        const neighbors = nodes.filter(n => neighborNodeIds.includes(n.id));
+
+        const forbiddenColors = new Set(neighbors.map(n => n.color).filter(c => c !== null));
+        return {
+          ...node,
+          degree: neighbors.length,
+          neighbors,
+          forbiddenColors: Array.from(forbiddenColors),
+        };
+      }, [inspectingNodeId, nodes, edges]);
+
+      const currentStep = useMemo(() => {
+        if (currentStepIndex >= 0 && currentStepIndex < simulationSteps.length) {
+          return simulationSteps[currentStepIndex];
+        }
+        return null;
+      }, [currentStepIndex, simulationSteps]);
+
+      const colorClasses = useMemo(() => {
+        const classes = new Map();
+        nodes.forEach(n => {
+          if (n.color !== null) {
+            if (!classes.has(n.color)) classes.set(n.color, []);
+            classes.get(n.color).push(n);
+          }
+        });
+        return Array.from(classes.entries()).sort((a, b) => a[0] - b[0]);
+      }, [nodes]);
+
+      // Altura do painel de tabelas
+      const panelHeightClasses = {
+        compact: 'h-40',
+        medium: 'h-72',
+        large: 'h-96'
+      };
+
+      return (
+        <div className="flex flex-col h-screen w-screen overflow-hidden bg-dark-950 select-none" onClick={() => setContextMenu(null)}>
+          
+          {/* HEADER PRINCIPAL */}
+          <header className="h-16 border-b border-slate-800/80 bg-dark-900/90 px-4 flex items-center justify-between shrink-0 z-30 backdrop-blur-md">
+            
+            {/* Logo e Título */}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-teal-500 via-cyan-500 to-indigo-500 flex items-center justify-center shadow-lg shadow-teal-500/20 text-white font-bold text-lg">
+                χ
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="font-extrabold text-base tracking-tight text-white flex items-center gap-1.5">
+                    Simulador de Grafos Cromáticos
+                  </h1>
+                  <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-mono">
+                    Tabelas & Motion
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Coloração de Vértices, Matriz Interativa em Tempo Real & Física Suave
+                </p>
+              </div>
+            </div>
+
+            {/* Badges de Métricas Rápidas no Header */}
+            <div className="hidden lg:flex items-center gap-2">
+              <div className="flex items-center gap-1 bg-dark-850 px-3 py-1.5 rounded-lg border border-slate-800 text-xs">
+                <span className="text-slate-400 font-mono font-semibold">|V|:</span>
+                <span className="text-white font-bold font-mono">{metrics.n}</span>
+                <span className="text-slate-600 mx-1">|</span>
+                <span className="text-slate-400 font-mono font-semibold">|E|:</span>
+                <span className="text-white font-bold font-mono">{metrics.m}</span>
+              </div>
+
+              <div className="flex items-center gap-1 bg-dark-850 px-3 py-1.5 rounded-lg border border-slate-800 text-xs" title="Grau Máximo Δ(G)">
+                <span className="text-slate-400 font-mono font-semibold">Δ(G):</span>
+                <span className="text-cyan-400 font-bold font-mono">{metrics.maxDeg}</span>
+              </div>
+
+              <div className="flex items-center gap-1 bg-dark-850 px-3 py-1.5 rounded-lg border border-slate-800 text-xs" title="Tamanho do Maior Clique ω(G)">
+                <span className="text-slate-400 font-mono font-semibold">ω(G):</span>
+                <span className="text-amber-400 font-bold font-mono">{metrics.omega}</span>
+              </div>
+
+              <div className="flex items-center gap-1.5 bg-gradient-to-r from-teal-950/60 to-indigo-950/60 px-3.5 py-1.5 rounded-lg border border-teal-500/30 text-xs shadow-inner" title="Número Cromático Ótimo Exato">
+                <span className="text-teal-300 font-mono font-bold">χ(G) Exato:</span>
+                <span className="text-teal-200 font-extrabold text-sm font-mono">{metrics.chi}</span>
+              </div>
+
+              {/* Status de Bipartição */}
+              <button
+                onClick={() => setHighlightOddCycle(prev => !prev)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition ${
+                  metrics.isBipartite
+                    ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-300'
+                    : highlightOddCycle
+                    ? 'bg-amber-500/20 border-amber-500 text-amber-300 animate-pulse'
+                    : 'bg-dark-850 border-slate-800 text-slate-300 hover:border-amber-500/50'
+                }`}
+                title={metrics.isBipartite ? "Grafo é 2-colorível (Bipartido)" : "Destacar Ciclo Ímpar"}
+              >
+                <span className="w-2 h-2 rounded-full bg-current"></span>
+                <span>{metrics.isBipartite ? 'Bipartido (χ=2)' : 'Ciclo Ímpar'}</span>
+              </button>
+
+              {/* Status da Coloração Atual */}
+              <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold ${
+                metrics.conflicts.length > 0
+                  ? 'bg-rose-950/50 border-rose-500/50 text-rose-400 animate-pulse'
+                  : metrics.allColored
+                  ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
+                  : 'bg-dark-850 border-slate-800 text-slate-400'
+              }`}>
+                {metrics.conflicts.length > 0 ? (
+                  <>
+                    <Icons.AlertTriangle />
+                    <span>{metrics.conflicts.length} Conflito(s)</span>
+                  </>
+                ) : metrics.allColored ? (
+                  <>
+                    <Icons.CheckCircle />
+                    <span>Válida ({metrics.usedColorsCount} cores)</span>
+                  </>
+                ) : (
+                  <span>{metrics.usedColorsCount > 0 ? `${metrics.usedColorsCount} cores usadas` : 'Sem coloração'}</span>
+                )}
+              </div>
+            </div>
+
+            {/* Ações do Header */}
+            <div className="flex items-center gap-2">
+              {/* Toggle de Som */}
+              <button
+                onClick={() => setSoundEnabled(s => !s)}
+                className={`p-2 rounded-lg border text-xs transition ${
+                  soundEnabled
+                    ? 'bg-dark-850 border-slate-700 text-teal-400 hover:text-teal-300'
+                    : 'bg-dark-900 border-slate-800 text-slate-500 hover:text-slate-300'
+                }`}
+                title={soundEnabled ? "Áudio Ativo" : "Áudio Mudo"}
+              >
+                {soundEnabled ? <Icons.Volume2 /> : <Icons.VolumeX />}
+              </button>
+
+              {/* Toggle de Física Contínua */}
+              <button
+                onClick={() => setLivePhysics(p => !p)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition ${
+                  livePhysics
+                    ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 shadow-sm shadow-cyan-500/20'
+                    : 'bg-dark-850 border-slate-700 text-slate-300 hover:border-cyan-500/50'
+                }`}
+                title="Molas Físicas em Tempo Real"
+              >
+                <Icons.Flame />
+                <span className="hidden sm:inline">Molas Vivas</span>
+              </button>
+
+              {/* Toggle de Motion nas Edições de Tabela */}
+              <button
+                onClick={() => setAutoMotionOnEdit(m => !m)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition ${
+                  autoMotionOnEdit
+                    ? 'bg-teal-500/20 border-teal-500 text-teal-300 shadow-sm'
+                    : 'bg-dark-850 border-slate-700 text-slate-400 hover:text-white'
+                }`}
+                title="Ativar/Desativar Motion Suave no Grafo ao editar tabelas"
+              >
+                <Icons.Sparkles />
+                <span className="hidden sm:inline">{autoMotionOnEdit ? 'Motion On' : 'Motion Off'}</span>
+              </button>
+
+              {/* Servidor LAN */}
+              <button
+                onClick={() => setShowLanModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-950/50 hover:bg-teal-900/60 border border-teal-500/40 text-teal-300 text-xs font-semibold transition active:scale-95"
+                title="Ver Endereço de Rede Local (LAN)"
+              >
+                <Icons.Share2 />
+                <span className="hidden sm:inline">Rede LAN</span>
+              </button>
+
+              {/* Teoria */}
+              <button
+                onClick={() => setShowTheoryModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-950/40 hover:bg-indigo-900/50 border border-indigo-500/40 text-indigo-300 text-xs font-semibold transition active:scale-95"
+                title="Ver Teoremas & Guia Didático"
+              >
+                <Icons.BookOpen />
+                <span className="hidden sm:inline">Teoria</span>
+              </button>
+            </div>
+          </header>
+
+          {/* CORPO PRINCIPAL */}
+          <div className="flex-1 flex overflow-hidden">
+            
+            {/* SIDEBAR LATERAL ESQUERDA */}
+            <aside className="w-80 border-r border-slate-800/80 bg-dark-900 flex flex-col shrink-0 overflow-y-auto z-20">
+              
+              {/* FERRAMENTAS DE INTERAÇÃO */}
+              <div className="p-3.5 border-b border-slate-800/80">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2 font-mono">
+                  Modo de Interação
+                </span>
+                <div className="grid grid-cols-5 gap-1.5 bg-dark-950 p-1 rounded-xl border border-slate-800">
+                  <button
+                    onClick={() => setCurrentTool('select')}
+                    className={`flex flex-col items-center justify-center py-2 rounded-lg text-xs font-medium transition ${
+                      currentTool === 'select' ? 'bg-teal-500 text-white shadow-md' : 'text-slate-400 hover:text-slate-200 hover:bg-dark-850'
+                    }`}
+                    title="Mover e Inspecionar Vértices"
+                  >
+                    <Icons.Move />
+                    <span className="text-[10px] mt-1">Mover</span>
+                  </button>
+
+                  <button
+                    onClick={() => setCurrentTool('addNode')}
+                    className={`flex flex-col items-center justify-center py-2 rounded-lg text-xs font-medium transition ${
+                      currentTool === 'addNode' ? 'bg-teal-500 text-white shadow-md' : 'text-slate-400 hover:text-slate-200 hover:bg-dark-850'
+                    }`}
+                    title="Adicionar Vértice no Canvas"
+                  >
+                    <Icons.Plus />
+                    <span className="text-[10px] mt-1">+ Vértice</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setCurrentTool('addEdge');
+                      setEdgeStartNodeId(null);
+                    }}
+                    className={`flex flex-col items-center justify-center py-2 rounded-lg text-xs font-medium transition ${
+                      currentTool === 'addEdge' ? 'bg-teal-500 text-white shadow-md' : 'text-slate-400 hover:text-slate-200 hover:bg-dark-850'
+                    }`}
+                    title="Conectar dois Vértices com Aresta"
+                  >
+                    <Icons.Link />
+                    <span className="text-[10px] mt-1">Aresta</span>
+                  </button>
+
+                  <button
+                    onClick={() => setCurrentTool('paint')}
+                    className={`flex flex-col items-center justify-center py-2 rounded-lg text-xs font-medium transition ${
+                      currentTool === 'paint' ? 'bg-teal-500 text-white shadow-md' : 'text-slate-400 hover:text-slate-200 hover:bg-dark-850'
+                    }`}
+                    title="Coloração Manual com a Paleta"
+                  >
+                    <Icons.Palette />
+                    <span className="text-[10px] mt-1">Pintar</span>
+                  </button>
+
+                  <button
+                    onClick={() => setCurrentTool('remove')}
+                    className={`flex flex-col items-center justify-center py-2 rounded-lg text-xs font-medium transition ${
+                      currentTool === 'remove' ? 'bg-rose-600 text-white shadow-md' : 'text-slate-400 hover:text-rose-400 hover:bg-dark-850'
+                    }`}
+                    title="Remover Vértice ou Aresta"
+                  >
+                    <Icons.Trash />
+                    <span className="text-[10px] mt-1">Excluir</span>
+                  </button>
+                </div>
+
+                {/* Sub-painel da Paleta de Cores */}
+                <div className="mt-3 bg-dark-950 p-2.5 rounded-xl border border-slate-800/80">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1.5 font-mono">
+                      <Icons.Palette /> Paleta Cromática
+                    </span>
+                    <button
+                      onClick={() => setSelectedColorId(null)}
+                      className={`text-[10px] px-2 py-0.5 rounded border transition flex items-center gap-1 ${
+                        selectedColorId === null
+                          ? 'bg-rose-500/20 border-rose-500 text-rose-300 font-bold'
+                          : 'bg-dark-850 border-slate-700 text-slate-400 hover:text-white'
+                      }`}
+                      title="Borracha: remove cor do vértice"
+                    >
+                      <Icons.Eraser /> Borracha
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-7 gap-1.5">
+                    {PALETTE.map(c => (
+                      <button
+                        key={c.id}
+                        onClick={() => {
+                          setSelectedColorId(c.id);
+                          setCurrentTool('paint');
+                          SoundEngine.playColorNote(c.id);
+                        }}
+                        style={{ backgroundColor: c.hex }}
+                        className={`h-7 rounded-md text-[10px] font-extrabold flex items-center justify-center transition transform active:scale-90 ${
+                          selectedColorId === c.id ? 'ring-2 ring-white ring-offset-2 ring-offset-dark-950 scale-110 shadow-lg' : 'opacity-85 hover:opacity-100'
+                        }`}
+                        title={`${c.name} (${c.badge})`}
+                      >
+                        <span style={{ color: c.text }}>{c.badge}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* MODO DESAFIO */}
+              <div className="p-3.5 border-b border-slate-800/80 bg-gradient-to-b from-dark-900 to-dark-850">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                      <Icons.Trophy />
+                    </div>
+                    <span className="text-xs font-bold text-white uppercase tracking-wider font-mono">
+                      Modo Desafio
+                    </span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={challengeMode}
+                      onChange={(e) => setChallengeMode(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-500"></div>
+                  </label>
+                </div>
+
+                {challengeMode ? (
+                  <div className="bg-dark-950 p-2.5 rounded-xl border border-amber-500/30 text-xs">
+                    <p className="text-slate-300 mb-2">
+                      🎯 Meta: Colorir o grafo sem conflitos usando exatamente <span className="text-amber-400 font-bold font-mono">χ = {metrics.chi}</span> cores!
+                    </p>
+                    <div className="grid grid-cols-2 gap-2 text-center">
+                      <div className="bg-dark-900 p-2 rounded-lg border border-slate-800">
+                        <span className="text-[10px] text-slate-400 block">Cores Usadas</span>
+                        <span className={`text-base font-extrabold font-mono ${metrics.usedColorsCount > metrics.chi ? 'text-rose-400' : 'text-emerald-400'}`}>
+                          {metrics.usedColorsCount} / {metrics.chi}
+                        </span>
+                      </div>
+                      <div className="bg-dark-900 p-2 rounded-lg border border-slate-800">
+                        <span className="text-[10px] text-slate-400 block">Conflitos</span>
+                        <span className={`text-base font-extrabold font-mono ${metrics.conflicts.length > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                          {metrics.conflicts.length}
+                        </span>
+                      </div>
+                    </div>
+                    {metrics.isValidColoring && metrics.usedColorsCount === metrics.chi && (
+                      <div className="mt-2.5 p-2 bg-emerald-950/60 border border-emerald-500/50 rounded-lg text-emerald-300 text-[11px] font-bold text-center animate-bounce">
+                        🎉 PARABÉNS! Você atingiu o Número Cromático Ótimo!
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-400">
+                    Ative para testar sua capacidade de colorir grafos manualmente com o mínimo de cores.
+                  </p>
+                )}
+              </div>
+
+              {/* SIMULAÇÃO DIDÁTICA */}
+              <div className="p-3.5 border-b border-slate-800/80 flex-1">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2 font-mono">
+                  Simulação Didática
+                </span>
+
+                <div className="flex flex-col gap-1.5 mb-3">
+                  {[
+                    { id: 'dsatur', name: 'DSatur (Brélaz)', tag: 'Mais Eficiente', desc: 'Prioriza vértices com maior saturação de cores' },
+                    { id: 'welsh-powell', name: 'Welsh-Powell', tag: 'Por Graus', desc: 'Ordena vértices por grau decrescente' },
+                    { id: 'greedy', name: 'Guloso Sequencial', tag: 'First-Fit', desc: 'Processa vértices na ordem natural' },
+                    { id: 'exact', name: 'Coloração Exata', tag: 'Ótimo χ', desc: 'Branch-and-bound garantindo o menor χ(G)' }
+                  ].map(algo => (
+                    <button
+                      key={algo.id}
+                      onClick={() => {
+                        setSelectedAlgorithm(algo.id);
+                        resetSimulationState();
+                      }}
+                      className={`text-left p-2 rounded-xl border transition ${
+                        selectedAlgorithm === algo.id
+                          ? 'bg-teal-950/40 border-teal-500 text-white shadow-sm'
+                          : 'bg-dark-950 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-200">{algo.name}</span>
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-dark-850 font-mono text-teal-400 border border-teal-500/20">
+                          {algo.tag}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-1">{algo.desc}</p>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Controles do Player */}
+                <div className="bg-dark-950 p-2.5 rounded-xl border border-slate-800 mb-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-bold text-slate-400 font-mono">Controle do Passo a Passo</span>
+                    <span className="text-[10px] font-mono text-teal-400">
+                      {currentStepIndex >= 0 ? `${currentStepIndex + 1} / ${simulationSteps.length || nodes.length}` : 'Pronto'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-1.5 mb-2.5">
+                    <button
+                      onClick={handleStepBack}
+                      disabled={currentStepIndex <= 0}
+                      className="py-1.5 bg-dark-850 hover:bg-dark-800 disabled:opacity-40 rounded-lg text-slate-300 flex items-center justify-center transition"
+                      title="Passo Anterior"
+                    >
+                      <Icons.StepBack />
+                    </button>
+
+                    <button
+                      onClick={() => setIsPlaying(prev => !prev)}
+                      className={`py-1.5 rounded-lg flex items-center justify-center font-bold text-xs transition ${
+                        isPlaying ? 'bg-amber-500 text-black' : 'bg-teal-500 text-white hover:bg-teal-400'
+                      }`}
+                      title={isPlaying ? "Pausar Simulação" : "Reproduzir Automaticamente"}
+                    >
+                      {isPlaying ? <Icons.Pause /> : <Icons.Play />}
+                    </button>
+
+                    <button
+                      onClick={handleStepForward}
+                      disabled={simulationSteps.length > 0 && currentStepIndex >= simulationSteps.length - 1}
+                      className="py-1.5 bg-dark-850 hover:bg-dark-800 disabled:opacity-40 rounded-lg text-slate-300 flex items-center justify-center transition"
+                      title="Próximo Passo"
+                    >
+                      <Icons.StepForward />
+                    </button>
+
+                    <button
+                      onClick={() => handleRunInstant()}
+                      className="py-1.5 bg-indigo-950/60 hover:bg-indigo-900/60 border border-indigo-500/40 rounded-lg text-indigo-300 flex items-center justify-center transition"
+                      title="Executar Tudo Instantâneo"
+                    >
+                      <Icons.Zap />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-slate-500 font-mono shrink-0">Velocidade:</span>
+                    <input
+                      type="range"
+                      min="150"
+                      max="1500"
+                      step="50"
+                      value={playbackSpeed}
+                      onChange={(e) => setPlaybackSpeed(Number(e.target.value))}
+                      className="w-full accent-teal-500 h-1 bg-slate-800 rounded-lg cursor-pointer"
+                    />
+                    <span className="text-[10px] text-slate-400 font-mono w-10 text-right">
+                      {playbackSpeed}ms
+                    </span>
+                  </div>
+                </div>
+
+                {/* Card de Explicação do Passo */}
+                {currentStep ? (
+                  <div ref={stepCardRef} className="bg-dark-950 p-3 rounded-xl border border-teal-500/30 text-xs shadow-inner">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-teal-400 animate-ping"></span>
+                        <span className="font-bold text-teal-300 font-mono">
+                          Passo {currentStep.stepIndex}: Vértice '{currentStep.targetNodeLabel}'
+                        </span>
+                      </div>
+                      <span
+                        className="px-2 py-0.5 rounded text-[10px] font-extrabold font-mono"
+                        style={{
+                          backgroundColor: PALETTE[currentStep.chosenColor % PALETTE.length].hex,
+                          color: PALETTE[currentStep.chosenColor % PALETTE.length].text
+                        }}
+                      >
+                        {PALETTE[currentStep.chosenColor % PALETTE.length].badge}
+                      </span>
+                    </div>
+
+                    <p className="text-slate-300 leading-relaxed text-[11px] mb-2">
+                      {currentStep.reasoning}
+                    </p>
+
+                    {currentStep.forbiddenColors && currentStep.forbiddenColors.length > 0 && (
+                      <div className="flex items-center gap-1.5 pt-1.5 border-t border-slate-800/80">
+                        <span className="text-[10px] text-slate-500">Cores Proibidas:</span>
+                        <div className="flex gap-1">
+                          {currentStep.forbiddenColors.map(c => (
+                            <span
+                              key={c}
+                              className="w-4 h-4 rounded text-[9px] font-bold flex items-center justify-center font-mono"
+                              style={{
+                                backgroundColor: PALETTE[c % PALETTE.length].hex,
+                                color: PALETTE[c % PALETTE.length].text
+                              }}
+                            >
+                              {PALETTE[c % PALETTE.length].badge}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-dark-950/60 p-3 rounded-xl border border-dashed border-slate-800 text-center text-slate-500 text-[11px]">
+                    Selecione um algoritmo e clique em <strong className="text-slate-400">Próximo Passo</strong> ou <strong className="text-slate-400">Play</strong> para simular passo a passo.
+                  </div>
+                )}
+              </div>
+
+              {/* PRESETS */}
+              <div className="p-3.5 border-t border-slate-800/80 bg-dark-950/50">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider font-mono">
+                    Grafos Pré-Definidos
+                  </span>
+                  <button
+                    onClick={() => setShowRandomModal(true)}
+                    className="text-[10px] px-2 py-0.5 rounded bg-dark-850 hover:bg-dark-800 border border-slate-700 text-teal-300 font-semibold flex items-center gap-1 transition"
+                  >
+                    <Icons.Shuffle /> Aleatório G(n,p)
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-1.5">
+                  {Object.entries(GRAPH_PRESETS).map(([key, item]) => (
+                    <button
+                      key={key}
+                      onClick={() => handleLoadPreset(key)}
+                      className="px-2.5 py-1.5 bg-dark-900 hover:bg-dark-850 border border-slate-800 hover:border-slate-700 rounded-lg text-left text-slate-300 text-xs transition"
+                      title={item.desc}
+                    >
+                      <span className="block font-semibold text-[11px] truncate">{item.name}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-2 mt-3 pt-2 border-t border-slate-800">
+                  <button
+                    onClick={handleClearColors}
+                    className="flex-1 py-1.5 rounded-lg bg-dark-900 hover:bg-dark-850 border border-slate-800 text-slate-400 hover:text-white text-[11px] font-semibold transition"
+                  >
+                    Limpar Cores
+                  </button>
+                  <button
+                    onClick={handleClearAll}
+                    className="flex-1 py-1.5 rounded-lg bg-rose-950/30 hover:bg-rose-900/40 border border-rose-800/40 text-rose-300 text-[11px] font-semibold transition"
+                  >
+                    Limpar Tudo
+                  </button>
+                </div>
+              </div>
+
+            </aside>
+
+            {/* CANVAS INTERATIVO */}
+            <main className="flex-1 flex flex-col relative overflow-hidden bg-dark-950">
+              
+              {/* Toolbar Flutuante de Instruções */}
+              <div className="absolute top-4 left-4 z-10 glass-panel px-3.5 py-2 rounded-xl text-xs flex items-center gap-2.5 shadow-lg pointer-events-none">
+                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                <span className="text-slate-300">
+                  {hoveredMatrixCell ? (
+                    <span>
+                      Destaque da Célula da Tabela: <strong className="text-cyan-300">{nodes.find(n => n.id === hoveredMatrixCell.uId)?.label}</strong> ↔ <strong className="text-cyan-300">{nodes.find(n => n.id === hoveredMatrixCell.vId)?.label}</strong>
+                    </span>
+                  ) : currentTool === 'select' ? (
+                    "Modo Selecionar: Arraste nós, duplo-clique para mudar cor, botão direito para paleta rápida."
+                  ) : currentTool === 'addNode' ? (
+                    "Modo Vértice: Clique no canvas ou use a tabela abaixo para criar novos vértices."
+                  ) : currentTool === 'addEdge' ? (
+                    edgeStartNodeId ? "Clique no segundo vértice para conectar a aresta." : "Clique no primeiro vértice de origem."
+                  ) : currentTool === 'paint' ? (
+                    selectedColorId !== null ? `Modo Pintar: Clique no vértice para aplicar a cor ${PALETTE[selectedColorId % PALETTE.length].badge}.` : "Modo Borracha: Clique no vértice para remover sua cor."
+                  ) : (
+                    "Modo Excluir: Clique em qualquer nó ou aresta para remover."
+                  )}
+                </span>
+              </div>
+
+              {/* Controles de Zoom Flutuantes */}
+              <div className="absolute bottom-6 right-6 z-10 flex flex-col gap-1.5 glass-panel p-1.5 rounded-xl shadow-xl">
+                <button
+                  onClick={() => setZoom(z => Math.min(3, z * 1.2))}
+                  className="w-8 h-8 rounded-lg bg-dark-900 hover:bg-dark-800 text-slate-300 flex items-center justify-center transition"
+                  title="Aumentar Zoom"
+                >
+                  <Icons.ZoomIn />
+                </button>
+                <button
+                  onClick={() => setZoom(z => Math.max(0.3, z / 1.2))}
+                  className="w-8 h-8 rounded-lg bg-dark-900 hover:bg-dark-800 text-slate-300 flex items-center justify-center transition"
+                  title="Diminuir Zoom"
+                >
+                  <Icons.ZoomOut />
+                </button>
+                <button
+                  onClick={handleFitView}
+                  className="w-8 h-8 rounded-lg bg-dark-900 hover:bg-dark-800 text-slate-300 flex items-center justify-center transition"
+                  title="Centralizar Grafo"
+                >
+                  <Icons.Maximize />
+                </button>
+                <button
+                  onClick={handleResetZoom}
+                  className="w-8 h-8 rounded-lg bg-dark-900 hover:bg-dark-800 text-slate-300 text-[10px] font-mono flex items-center justify-center transition"
+                  title="Resetar Zoom para 100%"
+                >
+                  1x
+                </button>
+              </div>
+
+              {/* Viewport SVG Interativo */}
+              <div
+                ref={canvasContainerRef}
+                className="w-full flex-1 canvas-grid relative cursor-crosshair overflow-hidden"
+                onMouseDown={handleCanvasMouseDown}
+                onMouseMove={handleCanvasMouseMove}
+                onMouseUp={handleCanvasMouseUp}
+                onWheel={handleWheel}
+              >
+                <svg
+                  ref={svgRef}
+                  className="w-full h-full overflow-visible"
+                >
+                  <defs>
+                    <filter id="glow-red" x="-50%" y="-50%" width="200%" height="200%">
+                      <feDropShadow dx="0" dy="0" stdDeviation="6" floodColor="#ef4444" floodOpacity="0.8"/>
+                    </filter>
+                    <filter id="glow-active" x="-50%" y="-50%" width="200%" height="200%">
+                      <feDropShadow dx="0" dy="0" stdDeviation="8" floodColor="#14b8a6" floodOpacity="0.9"/>
+                    </filter>
+                    <filter id="glow-gold" x="-50%" y="-50%" width="200%" height="200%">
+                      <feDropShadow dx="0" dy="0" stdDeviation="6" floodColor="#f59e0b" floodOpacity="0.8"/>
+                    </filter>
+                    <filter id="glow-cyan" x="-50%" y="-50%" width="200%" height="200%">
+                      <feDropShadow dx="0" dy="0" stdDeviation="6" floodColor="#06b6d4" floodOpacity="0.85"/>
+                    </filter>
+                  </defs>
+
+                  <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
+                    
+                    {/* ARESTAS */}
+                    {edges.map(edge => {
+                      const sourceNode = nodes.find(n => n.id === edge.source);
+                      const targetNode = nodes.find(n => n.id === edge.target);
+                      if (!sourceNode || !targetNode) return null;
+
+                      const isConflict = metrics.conflicts.includes(edge.id);
+                      const isOddCycleEdge = highlightOddCycle && metrics.oddCycle && (
+                        metrics.oddCycle.includes(sourceNode.id) &&
+                        metrics.oddCycle.includes(targetNode.id)
+                      );
+                      const isCurrentStepEdge = currentStep && (
+                        (edge.source === currentStep.targetNodeId && targetNode.color !== null) ||
+                        (edge.target === currentStep.targetNodeId && sourceNode.color !== null)
+                      );
+                      const isTableHoveredEdge = hoveredMatrixCell && (
+                        (edge.source === hoveredMatrixCell.uId && edge.target === hoveredMatrixCell.vId) ||
+                        (edge.source === hoveredMatrixCell.vId && edge.target === hoveredMatrixCell.uId)
+                      );
+
+                      const midX = (sourceNode.x + targetNode.x) / 2;
+                      const midY = (sourceNode.y + targetNode.y) / 2;
+
+                      return (
+                        <g key={edge.id} className="cursor-pointer" onClick={(e) => handleEdgeClick(e, edge)}>
+                          <line
+                            x1={sourceNode.x}
+                            y1={sourceNode.y}
+                            x2={targetNode.x}
+                            y2={targetNode.y}
+                            className={`svg-edge-line ${
+                              isConflict
+                                ? 'edge-conflict'
+                                : isOddCycleEdge
+                                ? 'edge-odd-cycle'
+                                : isTableHoveredEdge
+                                ? 'stroke-cyan-300 stroke-[4] drop-shadow-[0_0_8px_rgba(6,182,212,0.9)]'
+                                : isCurrentStepEdge
+                                ? 'stroke-cyan-400 stroke-[3]'
+                                : 'stroke-slate-700/80 stroke-2 hover:stroke-slate-400'
+                            }`}
+                          />
+
+                          <line
+                            x1={sourceNode.x}
+                            y1={sourceNode.y}
+                            x2={targetNode.x}
+                            y2={targetNode.y}
+                            stroke="transparent"
+                            strokeWidth="16"
+                          />
+
+                          {isConflict && (
+                            <g transform={`translate(${midX}, ${midY})`} className="pointer-events-none">
+                              <circle r="9" fill="#ef4444" className="animate-pulse" />
+                              <text textAnchor="middle" dy="3.5" fill="#ffffff" fontSize="10" fontWeight="bold">!</text>
+                            </g>
+                          )}
+                        </g>
+                      );
+                    })}
+
+                    {/* Linha Fantasma Preview ao passar o mouse sobre célula desconectada da matriz */}
+                    {hoveredMatrixCell && (() => {
+                      const uNode = nodes.find(n => n.id === hoveredMatrixCell.uId);
+                      const vNode = nodes.find(n => n.id === hoveredMatrixCell.vId);
+                      if (!uNode || !vNode || uNode.id === vNode.id) return null;
+                      const hasEdge = edges.some(e =>
+                        (e.source === uNode.id && e.target === vNode.id) ||
+                        (e.source === vNode.id && e.target === uNode.id)
+                      );
+                      if (hasEdge) return null;
+                      return (
+                        <line
+                          x1={uNode.x}
+                          y1={uNode.y}
+                          x2={vNode.x}
+                          y2={vNode.y}
+                          className="edge-ghost-preview pointer-events-none"
+                        />
+                      );
+                    })()}
+
+                    {/* Linha Preview de Conexão no modo Criar Aresta */}
+                    {edgeStartNodeId && currentTool === 'addEdge' && (() => {
+                      const startNode = nodes.find(n => n.id === edgeStartNodeId);
+                      if (!startNode) return null;
+                      return (
+                        <line
+                          x1={startNode.x}
+                          y1={startNode.y}
+                          x2={cursorPos.x}
+                          y2={cursorPos.y}
+                          stroke="#14b8a6"
+                          strokeWidth="2.5"
+                          strokeDasharray="5 5"
+                          className="pointer-events-none animate-dash"
+                        />
+                      );
+                    })()}
+
+                    {/* VÉRTICES COM MOTION SUAVE */}
+                    {nodes.map(node => {
+                      const isCurrentStepTarget = currentStep && currentStep.targetNodeId === node.id;
+                      const isInspected = inspectedNode && inspectedNode.id === node.id;
+                      const isEdgeSource = edgeStartNodeId === node.id;
+                      const isOddCycleNode = highlightOddCycle && metrics.oddCycle && metrics.oddCycle.includes(node.id);
+                      const isTableHoveredNode = hoveredMatrixCell && (node.id === hoveredMatrixCell.uId || node.id === hoveredMatrixCell.vId);
+
+                      const paletteItem = node.color !== null ? PALETTE[node.color % PALETTE.length] : null;
+                      const fillColor = paletteItem ? paletteItem.hex : '#17202f';
+                      const textColor = paletteItem ? paletteItem.text : '#cbd5e1';
+
+                      return (
+                        <g
+                          key={node.id}
+                          transform={`translate(${node.x}, ${node.y})`}
+                          className="cursor-pointer svg-node-group"
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            if (e.button === 0 && currentTool === 'select') {
+                              setDraggingNodeId(node.id);
+                            }
+                          }}
+                          onClick={(e) => handleNodeClick(e, node)}
+                          onDoubleClick={(e) => handleNodeDoubleClick(e, node)}
+                          onContextMenu={(e) => handleNodeContextMenu(e, node)}
+                          onMouseEnter={() => setHoveredNodeId(node.id)}
+                          onMouseLeave={() => setHoveredNodeId(null)}
+                        >
+                          {/* Anel Pulsante no Passo Atual */}
+                          {isCurrentStepTarget && (
+                            <circle
+                              r="30"
+                              fill="none"
+                              stroke="#14b8a6"
+                              strokeWidth="3"
+                              className="node-pulse-active"
+                            />
+                          )}
+
+                          {/* Destaque ao passar o mouse na tabela de matriz */}
+                          {isTableHoveredNode && (
+                            <circle
+                              r="28"
+                              fill="none"
+                              stroke="#06b6d4"
+                              strokeWidth="3"
+                              strokeDasharray="4 2"
+                              filter="url(#glow-cyan)"
+                              className="animate-spin"
+                              style={{ animationDuration: '6s' }}
+                            />
+                          )}
+
+                          {/* Destaque para Ciclo Ímpar */}
+                          {isOddCycleNode && (
+                            <circle
+                              r="26"
+                              fill="none"
+                              stroke="#f59e0b"
+                              strokeWidth="2.5"
+                              strokeDasharray="4 2"
+                              filter="url(#glow-gold)"
+                            />
+                          )}
+
+                          {/* Corpo Principal do Nó */}
+                          <circle
+                            r={isTableHoveredNode ? "22" : "20"}
+                            fill={fillColor}
+                            stroke={
+                              isCurrentStepTarget
+                                ? '#14b8a6'
+                                : isTableHoveredNode
+                                ? '#06b6d4'
+                                : isInspected || isEdgeSource
+                                ? '#38bdf8'
+                                : isOddCycleNode
+                                ? '#f59e0b'
+                                : node.color !== null
+                                ? 'rgba(255,255,255,0.3)'
+                                : '#334460'
+                            }
+                            strokeWidth={isCurrentStepTarget || isInspected || isEdgeSource || isTableHoveredNode ? "3.5" : "2"}
+                            className="transition-all duration-200"
+                            filter={isCurrentStepTarget ? "url(#glow-active)" : isTableHoveredNode ? "url(#glow-cyan)" : undefined}
+                          />
+
+                          {/* Rótulo */}
+                          <text
+                            textAnchor="middle"
+                            dy="4.5"
+                            fill={textColor}
+                            fontSize="11"
+                            fontWeight="700"
+                            className="font-mono pointer-events-none select-none"
+                          >
+                            {node.label}
+                          </text>
+
+                          {/* Badge de Cor */}
+                          {paletteItem && (
+                            <g transform="translate(13, -13)" className="pointer-events-none">
+                              <circle r="7.5" fill="#0c1017" stroke={paletteItem.hex} strokeWidth="1.5" />
+                              <text
+                                textAnchor="middle"
+                                dy="2.5"
+                                fill="#ffffff"
+                                fontSize="7"
+                                fontWeight="800"
+                                className="font-mono"
+                              >
+                                {paletteItem.badge}
+                              </text>
+                            </g>
+                          )}
+                        </g>
+                      );
+                    })}
+
+                  </g>
+                </svg>
+              </div>
+
+              {/* MENU RÁPIDO DE CORES FLUTUANTE */}
+              {contextMenu && (
+                <div
+                  className="fixed z-50 glass-panel p-2.5 rounded-2xl shadow-2xl border border-teal-500/40 animate-fade-in"
+                  style={{ left: Math.min(window.innerWidth - 240, contextMenu.x), top: Math.min(window.innerHeight - 180, contextMenu.y) }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-800 text-[11px] font-mono font-bold text-slate-300">
+                    <span>Paleta Rápida</span>
+                    <button
+                      onClick={() => {
+                        setNodes(prev => prev.map(n => n.id === contextMenu.nodeId ? { ...n, color: null } : n));
+                        setContextMenu(null);
+                        SoundEngine.playPop();
+                      }}
+                      className="text-[10px] px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 flex items-center gap-1"
+                    >
+                      <Icons.Eraser /> Limpar
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-7 gap-1.5 w-52">
+                    {PALETTE.map(c => (
+                      <button
+                        key={c.id}
+                        onClick={() => {
+                          setNodes(prev => prev.map(n => n.id === contextMenu.nodeId ? { ...n, color: c.id } : n));
+                          SoundEngine.playColorNote(c.id);
+                          setContextMenu(null);
+                        }}
+                        style={{ backgroundColor: c.hex }}
+                        className="h-6 w-6 rounded-md text-[9px] font-extrabold flex items-center justify-center transition transform hover:scale-110 active:scale-95 shadow"
+                        title={`${c.name} (${c.badge})`}
+                      >
+                        <span style={{ color: c.text }}>{c.badge}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* CARD DE INSPEÇÃO DE VÉRTICE */}
+              {inspectedNode && (
+                <div className="absolute top-16 right-4 z-20 w-72 glass-panel p-3.5 rounded-2xl border border-cyan-500/30 shadow-2xl">
+                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-4 h-4 rounded-full border border-white/20"
+                        style={{ backgroundColor: inspectedNode.color !== null ? PALETTE[inspectedNode.color % PALETTE.length].hex : '#475569' }}
+                      />
+                      <h4 className="font-extrabold text-sm text-white font-mono">
+                        Vértice {inspectedNode.label}
+                      </h4>
+                    </div>
+                    <button
+                      onClick={() => setInspectingNodeId(null)}
+                      className="text-slate-400 hover:text-white text-xs px-1.5 py-0.5 rounded bg-dark-850"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between text-slate-300">
+                      <span className="text-slate-500">Grau d(v):</span>
+                      <span className="font-bold font-mono text-cyan-400">{inspectedNode.degree} arestas</span>
+                    </div>
+
+                    <div className="flex justify-between text-slate-300">
+                      <span className="text-slate-500">Cor Atual:</span>
+                      <span className="font-bold font-mono">
+                        {inspectedNode.color !== null
+                          ? `${PALETTE[inspectedNode.color % PALETTE.length].badge} - ${PALETTE[inspectedNode.color % PALETTE.length].name}`
+                          : 'Não colorido'}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-500 block mb-1">Vizinhos ({inspectedNode.neighbors.length}):</span>
+                      <div className="flex flex-wrap gap-1">
+                        {inspectedNode.neighbors.map(nb => (
+                          <span
+                            key={nb.id}
+                            className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold flex items-center gap-1 border border-slate-700 bg-dark-900"
+                          >
+                            <span
+                              className="w-2 h-2 rounded-full"
+                              style={{ backgroundColor: nb.color !== null ? PALETTE[nb.color % PALETTE.length].hex : '#64748b' }}
+                            />
+                            {nb.label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-800">
+                      <span className="text-slate-500 block mb-1">Cores Proibidas nesta Vizinhança:</span>
+                      {inspectedNode.forbiddenColors.length > 0 ? (
+                        <div className="flex gap-1">
+                          {inspectedNode.forbiddenColors.map(c => (
+                            <span
+                              key={c}
+                              className="px-1.5 py-0.5 rounded text-[9px] font-bold font-mono"
+                              style={{
+                                backgroundColor: PALETTE[c % PALETTE.length].hex,
+                                color: PALETTE[c % PALETTE.length].text
+                              }}
+                            >
+                              {PALETTE[c % PALETTE.length].badge}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-slate-500 text-[10px]">Nenhuma cor ocupada pelos vizinhos.</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ========================================================= */}
+              {/* PAINEL INFERIOR INTERATIVO: MODO DE PREENCHER TABELAS COM MOTION */}
+              {/* ========================================================= */}
+              <div className="border-t border-slate-800/80 bg-dark-900/95 shrink-0 z-20 flex flex-col transition-all duration-300">
+                
+                {/* Abas Superiores do Painel de Tabelas */}
+                <div className="flex items-center justify-between px-4 border-b border-slate-800/80 text-xs shrink-0">
+                  <div className="flex items-center gap-1">
+                    {[
+                      { id: 'matrix', label: `Matriz de Adjacência (${nodes.length}×${nodes.length})`, icon: Icons.Grid },
+                      { id: 'edges', label: `Tabela de Arestas (${edges.length})`, icon: Icons.Link },
+                      { id: 'vertices', label: `Tabela de Vértices (${nodes.length})`, icon: Icons.Table },
+                      { id: 'classes', label: `Classes de Cores (${colorClasses.length})`, icon: Icons.Palette },
+                      { id: 'properties', label: 'Propriedades Matemáticas', icon: Icons.BookOpen },
+                      { id: 'io', label: 'Exportar / Importar', icon: Icons.Download }
+                    ].map(tab => {
+                      const TabIcon = tab.icon;
+                      return (
+                        <button
+                          key={tab.id}
+                          onClick={() => setActiveBottomTab(tab.id)}
+                          className={`px-3 py-2 font-semibold transition border-b-2 flex items-center gap-1.5 ${
+                            activeBottomTab === tab.id
+                              ? 'border-cyan-400 text-cyan-300 bg-dark-850'
+                              : 'border-transparent text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          <TabIcon />
+                          <span>{tab.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-slate-500 font-mono hidden sm:inline">
+                      Densidade: <strong className="text-slate-300">{metrics.density}</strong>
+                    </span>
+
+                    {/* Botões de Redimensionar Altura do Painel de Tabelas */}
+                    <div className="flex items-center bg-dark-950 p-0.5 rounded-lg border border-slate-800">
+                      <button
+                        onClick={() => setTablePanelSize('compact')}
+                        className={`px-2 py-0.5 text-[10px] rounded font-mono font-semibold transition ${
+                          tablePanelSize === 'compact' ? 'bg-cyan-500 text-white' : 'text-slate-400 hover:text-white'
+                        }`}
+                        title="Altura Compacta"
+                      >
+                        P
+                      </button>
+                      <button
+                        onClick={() => setTablePanelSize('medium')}
+                        className={`px-2 py-0.5 text-[10px] rounded font-mono font-semibold transition ${
+                          tablePanelSize === 'medium' ? 'bg-cyan-500 text-white' : 'text-slate-400 hover:text-white'
+                        }`}
+                        title="Altura Média"
+                      >
+                        M
+                      </button>
+                      <button
+                        onClick={() => setTablePanelSize('large')}
+                        className={`px-2 py-0.5 text-[10px] rounded font-mono font-semibold transition ${
+                          tablePanelSize === 'large' ? 'bg-cyan-500 text-white' : 'text-slate-400 hover:text-white'
+                        }`}
+                        title="Altura Expandida"
+                      >
+                        G
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Conteúdo Dinâmico das Tabelas */}
+                <div className={`${panelHeightClasses[tablePanelSize]} p-3 overflow-y-auto flex-1`}>
+                  
+                  {/* ========================================================= */}
+                  {/* TABELA 1: MATRIZ DE ADJACÊNCIA INTERATIVA (PREENCHÍVEL) */}
+                  {/* ========================================================= */}
+                  {activeBottomTab === 'matrix' && (
+                    <div className="space-y-3">
+                      {/* Barra de Ações Rápidas da Matriz */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-800/80">
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={handleAddVertexFromTable}
+                            className="px-2.5 py-1 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/40 text-teal-300 text-xs font-bold flex items-center gap-1 transition"
+                            title="Adicionar novo vértice (cria nova linha e coluna na matriz)"
+                          >
+                            <Icons.Plus /> Adicionar Vértice
+                          </button>
+
+                          <button
+                            onClick={handleComplementaryGraph}
+                            className="px-2.5 py-1 rounded-lg bg-dark-850 hover:bg-dark-800 border border-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1 transition"
+                            title="Inverter todas as conexões (Grafo Complementar)"
+                          >
+                            <Icons.Shuffle /> Grafo Complementar (Ḡ)
+                          </button>
+
+                          <button
+                            onClick={handleCompleteGraph}
+                            className="px-2.5 py-1 rounded-lg bg-dark-850 hover:bg-dark-800 border border-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1 transition"
+                            title="Conectar todos os vértices (Grafo Completo Kn)"
+                          >
+                            Grafo Completo (Kn)
+                          </button>
+
+                          <button
+                            onClick={handleClearMatrix}
+                            className="px-2.5 py-1 rounded-lg bg-dark-850 hover:bg-rose-950/40 border border-slate-700 text-slate-400 hover:text-rose-300 text-xs font-semibold flex items-center gap-1 transition"
+                            title="Remover todas as arestas"
+                          >
+                            Zerar Matriz
+                          </button>
+                        </div>
+
+                        <span className="text-[11px] text-slate-400 flex items-center gap-1 font-mono">
+                          💡 Clique em qualquer célula <strong className="text-cyan-400">0</strong> ou <strong className="text-teal-400">1</strong> para alternar conexões com motion!
+                        </span>
+                      </div>
+
+                      {/* Grade da Matriz de Adjacência */}
+                      {nodes.length === 0 ? (
+                        <p className="text-slate-500 text-xs">Nenhum vértice no grafo. Clique em "Adicionar Vértice" para começar.</p>
+                      ) : (
+                        <div className="overflow-x-auto pb-2">
+                          <table className="text-xs font-mono border-collapse select-none">
+                            <thead>
+                              <tr>
+                                <th className="p-1.5 text-slate-500 border border-slate-800 bg-dark-950 text-[10px]">V</th>
+                                {nodes.map(n => (
+                                  <th
+                                    key={n.id}
+                                    className={`p-1.5 border border-slate-800 text-center font-bold min-w-[34px] transition ${
+                                      hoveredMatrixCell && (hoveredMatrixCell.uId === n.id || hoveredMatrixCell.vId === n.id)
+                                        ? 'bg-cyan-950/60 text-cyan-300'
+                                        : 'bg-dark-900'
+                                    }`}
+                                    style={{ color: n.color !== null ? PALETTE[n.color % PALETTE.length].hex : undefined }}
+                                  >
+                                    {n.label}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {nodes.map(u => (
+                                <tr key={u.id}>
+                                  {/* Cabeçalho da Linha com Botão de Excluir */}
+                                  <td
+                                    className={`p-1 border border-slate-800 font-bold bg-dark-950 transition ${
+                                      hoveredMatrixCell && (hoveredMatrixCell.uId === u.id || hoveredMatrixCell.vId === u.id)
+                                        ? 'bg-cyan-950/60'
+                                        : ''
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between gap-1">
+                                      <span style={{ color: u.color !== null ? PALETTE[u.color % PALETTE.length].hex : '#94a3b8' }}>
+                                        {u.label}
+                                      </span>
+                                      <button
+                                        onClick={() => handleDeleteVertexFromTable(u.id)}
+                                        className="opacity-40 hover:opacity-100 text-rose-400 hover:text-rose-300 p-0.5 transition"
+                                        title={`Excluir vértice ${u.label}`}
+                                      >
+                                        <Icons.Trash />
+                                      </button>
+                                    </div>
+                                  </td>
+
+                                  {/* Células Clicáveis da Matriz */}
+                                  {nodes.map(v => {
+                                    const isDiagonal = u.id === v.id;
+                                    const isConnected = edges.some(e =>
+                                      (e.source === u.id && e.target === v.id) ||
+                                      (e.source === v.id && e.target === u.id)
+                                    );
+                                    const isHovered = hoveredMatrixCell && (
+                                      (hoveredMatrixCell.uId === u.id && hoveredMatrixCell.vId === v.id) ||
+                                      (hoveredMatrixCell.uId === v.id && hoveredMatrixCell.vId === u.id)
+                                    );
+
+                                    if (isDiagonal) {
+                                      return (
+                                        <td
+                                          key={v.id}
+                                          className="p-1 border border-slate-800/80 bg-dark-950/80 text-center text-slate-700"
+                                          title="Sem laços próprios em grafos simples"
+                                        >
+                                          —
+                                        </td>
+                                      );
+                                    }
+
+                                    return (
+                                      <td
+                                        key={v.id}
+                                        className={`p-1 text-center border border-slate-800/80 transition-all ${
+                                          isHovered ? 'bg-cyan-500/20 ring-1 ring-cyan-400' : ''
+                                        }`}
+                                        onMouseEnter={() => setHoveredMatrixCell({ uId: u.id, vId: v.id })}
+                                        onMouseLeave={() => setHoveredMatrixCell(null)}
+                                      >
+                                        <button
+                                          onClick={() => handleToggleMatrixCell(u.id, v.id)}
+                                          className={`w-7 h-7 rounded-md font-bold text-xs flex items-center justify-center matrix-cell-btn ${
+                                            isConnected
+                                              ? 'bg-teal-500/20 text-teal-300 border border-teal-500/50 hover:bg-rose-500/20 hover:text-rose-300 hover:border-rose-500/50 shadow-sm'
+                                              : 'bg-dark-850/60 text-slate-500 hover:bg-cyan-500/20 hover:text-cyan-300 hover:border-cyan-500/40'
+                                          }`}
+                                          title={isConnected ? `Conectado (Clique para desconectar ${u.label} ↔ ${v.label})` : `Desconectado (Clique para conectar ${u.label} ↔ ${v.label})`}
+                                        >
+                                          {isConnected ? '1' : '0'}
+                                        </button>
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ========================================================= */}
+                  {/* TABELA 2: TABELA DE ARESTAS INTERATIVA */}
+                  {/* ========================================================= */}
+                  {activeBottomTab === 'edges' && (
+                    <div className="space-y-3">
+                      {/* Formulário para Adicionar Aresta */}
+                      <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl bg-dark-950 border border-slate-800">
+                        <span className="text-xs font-bold text-slate-300 font-mono flex items-center gap-1">
+                          <Icons.Link /> Nova Aresta:
+                        </span>
+                        
+                        <select
+                          value={newEdgeSource}
+                          onChange={(e) => setNewEdgeSource(e.target.value)}
+                          className="bg-dark-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 font-mono focus:border-cyan-500 outline-none"
+                        >
+                          <option value="">Selecione Vértice Origem...</option>
+                          {nodes.map(n => (
+                            <option key={n.id} value={n.id}>{n.label}</option>
+                          ))}
+                        </select>
+
+                        <span className="text-slate-500 text-xs">↔</span>
+
+                        <select
+                          value={newEdgeTarget}
+                          onChange={(e) => setNewEdgeTarget(e.target.value)}
+                          className="bg-dark-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 font-mono focus:border-cyan-500 outline-none"
+                        >
+                          <option value="">Selecione Vértice Destino...</option>
+                          {nodes.map(n => (
+                            <option key={n.id} value={n.id}>{n.label}</option>
+                          ))}
+                        </select>
+
+                        <button
+                          onClick={handleAddEdgeFromTable}
+                          disabled={!newEdgeSource || !newEdgeTarget || newEdgeSource === newEdgeTarget}
+                          className="px-3.5 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 disabled:opacity-40 text-white font-bold text-xs flex items-center gap-1 transition"
+                        >
+                          <Icons.Plus /> Conectar
+                        </button>
+                      </div>
+
+                      {/* Lista de Arestas */}
+                      {edges.length === 0 ? (
+                        <p className="text-slate-500 text-xs">Nenhuma aresta no grafo. Conecte vértices usando a matriz ou o formulário acima.</p>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                          {edges.map(edge => {
+                            const u = nodes.find(n => n.id === edge.source);
+                            const v = nodes.find(n => n.id === edge.target);
+                            const isConflict = metrics.conflicts.includes(edge.id);
+
+                            return (
+                              <div
+                                key={edge.id}
+                                onMouseEnter={() => setHoveredMatrixCell({ uId: edge.source, vId: edge.target })}
+                                onMouseLeave={() => setHoveredMatrixCell(null)}
+                                className={`p-2.5 rounded-xl border flex items-center justify-between text-xs font-mono transition ${
+                                  isConflict
+                                    ? 'bg-rose-950/40 border-rose-500/50 text-rose-300'
+                                    : 'bg-dark-950 border-slate-800 hover:border-cyan-500/40 text-slate-200'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: u?.color !== null ? PALETTE[u?.color % PALETTE.length]?.hex : '#64748b' }}></span>
+                                  <strong>{u?.label || '?'}</strong>
+                                  <span className="text-slate-500">↔</span>
+                                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: v?.color !== null ? PALETTE[v?.color % PALETTE.length]?.hex : '#64748b' }}></span>
+                                  <strong>{v?.label || '?'}</strong>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  {isConflict && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 font-bold">
+                                      Conflito
+                                    </span>
+                                  )}
+                                  <button
+                                    onClick={() => handleToggleMatrixCell(edge.source, edge.target)}
+                                    className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition"
+                                    title="Excluir aresta"
+                                  >
+                                    <Icons.Trash />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ========================================================= */}
+                  {/* TABELA 3: TABELA DE VÉRTICES INTERATIVA */}
+                  {/* ========================================================= */}
+                  {activeBottomTab === 'vertices' && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
+                        <span className="text-xs text-slate-400 font-mono">
+                          Edite os rótulos e selecione as cores dos vértices diretamente na tabela.
+                        </span>
+                        <button
+                          onClick={handleAddVertexFromTable}
+                          className="px-2.5 py-1 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/40 text-teal-300 text-xs font-bold flex items-center gap-1 transition"
+                        >
+                          <Icons.Plus /> Novo Vértice
+                        </button>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs font-mono text-left border-collapse">
+                          <thead>
+                            <tr className="border-b border-slate-800 text-slate-400">
+                              <th className="p-2">ID</th>
+                              <th className="p-2">Rótulo (Editável)</th>
+                              <th className="p-2">Grau d(v)</th>
+                              <th className="p-2">Cor Atribuída</th>
+                              <th className="p-2">Posição (X, Y)</th>
+                              <th className="p-2 text-right">Ações</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {nodes.map(node => {
+                              const neighborCount = edges.filter(e => e.source === node.id || e.target === node.id).length;
+                              return (
+                                <tr key={node.id} className="border-b border-slate-800/60 hover:bg-dark-850/50 transition">
+                                  <td className="p-2 text-slate-500 text-[10px]">{node.id}</td>
+                                  
+                                  {/* Rótulo editável inline */}
+                                  <td className="p-2">
+                                    <input
+                                      type="text"
+                                      value={node.label}
+                                      onChange={(e) => {
+                                        const newLabel = e.target.value;
+                                        setNodes(prev => prev.map(n => n.id === node.id ? { ...n, label: newLabel } : n));
+                                      }}
+                                      className="bg-dark-950 border border-slate-700 focus:border-cyan-500 rounded px-2 py-1 text-xs text-white font-mono w-24 outline-none"
+                                    />
+                                  </td>
+
+                                  <td className="p-2 text-cyan-400 font-bold">{neighborCount} arestas</td>
+
+                                  {/* Seletor de Cor */}
+                                  <td className="p-2">
+                                    <select
+                                      value={node.color !== null ? node.color : ''}
+                                      onChange={(e) => {
+                                        const val = e.target.value === '' ? null : Number(e.target.value);
+                                        setNodes(prev => prev.map(n => n.id === node.id ? { ...n, color: val } : n));
+                                        if (val !== null) SoundEngine.playColorNote(val);
+                                        else SoundEngine.playPop();
+                                      }}
+                                      className="bg-dark-950 border border-slate-700 text-slate-200 text-xs rounded px-2 py-1 font-mono focus:border-cyan-500 outline-none"
+                                    >
+                                      <option value="">Sem Cor (Transparente)</option>
+                                      {PALETTE.map(c => (
+                                        <option key={c.id} value={c.id}>{c.badge} - {c.name}</option>
+                                      ))}
+                                    </select>
+                                  </td>
+
+                                  <td className="p-2 text-slate-500 text-[10px]">({node.x}, {node.y})</td>
+
+                                  <td className="p-2 text-right">
+                                    <button
+                                      onClick={() => handleDeleteVertexFromTable(node.id)}
+                                      className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition"
+                                      title="Excluir vértice"
+                                    >
+                                      <Icons.Trash />
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* CLASSES DE CORES */}
+                  {activeBottomTab === 'classes' && (
+                    <div>
+                      {colorClasses.length === 0 ? (
+                        <p className="text-slate-500 text-xs">O grafo ainda não possui vértices coloridos.</p>
+                      ) : (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                          {colorClasses.map(([colorId, classNodes]) => {
+                            const pItem = PALETTE[colorId % PALETTE.length];
+                            return (
+                              <div
+                                key={colorId}
+                                className="p-2.5 rounded-xl bg-dark-950 border border-slate-800 flex flex-col justify-between"
+                              >
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <span className="text-xs font-bold font-mono" style={{ color: pItem.hex }}>
+                                    Classe {pItem.badge} ({pItem.name})
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 font-mono">
+                                    {classNodes.length} nó(s)
+                                  </span>
+                                </div>
+                                <div className="flex flex-wrap gap-1">
+                                  {classNodes.map(n => (
+                                    <span key={n.id} className="px-1.5 py-0.5 rounded bg-dark-850 text-[10px] font-mono text-slate-300 border border-slate-700">
+                                      {n.label}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* PROPRIEDADES MATEMÁTICAS */}
+                  {activeBottomTab === 'properties' && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                      <div className="p-2.5 rounded-xl bg-dark-950 border border-slate-800">
+                        <span className="font-bold text-teal-400 block mb-1">Limitante Inferior (Clique)</span>
+                        <p className="text-slate-300 text-[11px] leading-relaxed">
+                          Todo subgrafo completo exige cores distintas: <br/>
+                          <strong className="text-white font-mono">χ(G) ≥ ω(G) = {metrics.omega}</strong>
+                        </p>
+                      </div>
+
+                      <div className="p-2.5 rounded-xl bg-dark-950 border border-slate-800">
+                        <span className="font-bold text-cyan-400 block mb-1">Teorema de Brooks (1941)</span>
+                        <p className="text-slate-300 text-[11px] leading-relaxed">
+                          Para grafos conexos que não sejam Kn nem C2k+1:<br/>
+                          <strong className="text-white font-mono">χ(G) ≤ Δ(G) = {metrics.maxDeg}</strong>
+                        </p>
+                      </div>
+
+                      <div className="p-2.5 rounded-xl bg-dark-950 border border-slate-800">
+                        <span className="font-bold text-amber-400 block mb-1">Teorema das 4 Cores (1976)</span>
+                        <p className="text-slate-300 text-[11px] leading-relaxed">
+                          Se o grafo for planar (sem K5 ou K3,3 menores):<br/>
+                          <strong className="text-white font-mono">χ(G) ≤ 4</strong>
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* EXPORTAR E IMPORTAR */}
+                  {activeBottomTab === 'io' && (
+                    <div className="flex flex-wrap items-center gap-3 text-xs">
+                      <button
+                        onClick={handleExportJSON}
+                        className="px-3.5 py-2 rounded-xl bg-dark-950 hover:bg-dark-850 border border-slate-700 text-slate-200 font-semibold flex items-center gap-2 transition"
+                      >
+                        <Icons.Download /> Baixar JSON do Grafo
+                      </button>
+
+                      <label className="px-3.5 py-2 rounded-xl bg-dark-950 hover:bg-dark-850 border border-slate-700 text-slate-200 font-semibold flex items-center gap-2 transition cursor-pointer">
+                        <Icons.Upload /> Carregar JSON
+                        <input type="file" accept=".json" onChange={handleImportJSON} className="hidden" />
+                      </label>
+
+                      <button
+                        onClick={handleExportSVG}
+                        className="px-3.5 py-2 rounded-xl bg-teal-950/60 hover:bg-teal-900/60 border border-teal-500/40 text-teal-300 font-semibold flex items-center gap-2 transition"
+                      >
+                        <Icons.Download /> Exportar Imagem SVG Vetorial
+                      </button>
+                    </div>
+                  )}
+
+                </div>
+              </div>
+
+            </main>
+
+          </div>
+
+          {/* MODAL: GUIA TEÓRICO */}
+          {showTheoryModal && (
+            <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-dark-900 border border-slate-700 w-full max-w-3xl max-h-[85vh] rounded-2xl flex flex-col shadow-2xl overflow-hidden">
+                <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-teal-500/20 text-teal-400 flex items-center justify-center font-bold">
+                      χ
+                    </div>
+                    <div>
+                      <h3 className="font-extrabold text-base text-white">Guia Teórico: Coloração de Grafos</h3>
+                      <p className="text-xs text-slate-400">Fundamentos matemáticos, complexidade e algoritmos</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowTheoryModal(false)}
+                    className="p-1 rounded-lg bg-dark-850 text-slate-400 hover:text-white"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="p-6 overflow-y-auto space-y-5 text-sm text-slate-300 leading-relaxed">
+                  <div className="bg-dark-950 p-4 rounded-xl border border-slate-800">
+                    <h4 className="text-teal-400 font-bold mb-1.5 flex items-center gap-2">
+                      <span>1. O que é o Número Cromático χ(G)?</span>
+                    </h4>
+                    <p className="text-xs text-slate-300">
+                      O <strong>número cromático</strong> de um grafo simples G = (V, E), denotado por χ(G), é o número mínimo de cores necessárias para colorir os vértices de G de modo que nenhum par de vértices adjacentes compartilhe a mesma cor (coloração própria).
+                    </p>
+                  </div>
+
+                  <div className="bg-dark-950 p-4 rounded-xl border border-slate-800">
+                    <h4 className="text-cyan-400 font-bold mb-1.5 flex items-center gap-2">
+                      <span>2. Heurística DSatur (Degree of Saturation - Brélaz, 1979)</span>
+                    </h4>
+                    <p className="text-xs text-slate-300">
+                      O <strong>grau de saturação</strong> de um vértice é o número de cores distintas já atribuídas aos seus vizinhos. O algoritmo seleciona dinamicamente o vértice não-colorido com maior grau de saturação (desempatando pelo grau não-colorido e depois grau total) e atribui a ele o menor índice de cor viável. É uma das heurísticas mais eficientes conhecidas na literatura.
+                    </p>
+                  </div>
+
+                  <div className="bg-dark-950 p-4 rounded-xl border border-slate-800">
+                    <h4 className="text-amber-400 font-bold mb-1.5 flex items-center gap-2">
+                      <span>3. Algoritmo de Welsh-Powell (1967)</span>
+                    </h4>
+                    <p className="text-xs text-slate-300">
+                      Ordena os vértices em ordem decrescente de grau: d(v1) ≥ d(v2) ≥ ... ≥ d(vn). Em seguida, para cada cor k, varre a lista ordenada e colore de forma gulosa todos os vértices possíveis que não sejam adjacentes aos já coloridos com k, gerando conjuntos independentes sequencialmente.
+                    </p>
+                  </div>
+
+                  <div className="bg-dark-950 p-4 rounded-xl border border-slate-800">
+                    <h4 className="text-rose-400 font-bold mb-1.5 flex items-center gap-2">
+                      <span>4. Limitantes Teóricos Clássicos</span>
+                    </h4>
+                    <ul className="text-xs text-slate-300 space-y-1.5 list-disc list-inside">
+                      <li><strong>Clique:</strong> χ(G) ≥ ω(G), onde ω(G) é o tamanho do maior subgrafo completo.</li>
+                      <li><strong>Teorema de Brooks:</strong> Para todo grafo conexo que não seja Kn nem um ciclo ímpar C_(2k+1), tem-se χ(G) ≤ Δ(G).</li>
+                      <li><strong>Teorema das Quatro Cores (Appel & Haken, 1976):</strong> Todo grafo planar é 4-colorível (χ(G) ≤ 4).</li>
+                      <li><strong>Grafos Bipartidos:</strong> Um grafo é 2-colorível se e somente se não contém ciclos de comprimento ímpar.</li>
+                    </ul>
+                  </div>
+
+                  <div className="bg-dark-950 p-4 rounded-xl border border-slate-800">
+                    <h4 className="text-purple-400 font-bold mb-1.5 flex items-center gap-2">
+                      <span>5. Complexidade Computacional</span>
+                    </h4>
+                    <p className="text-xs text-slate-300">
+                      Determinar se χ(G) ≤ 2 pertence à classe P (resolvível em tempo linear via BFS). Porém, decidir se χ(G) ≤ k para k ≥ 3 é um clássico problema <strong>NP-completo</strong> (Karp, 1972). Por isso, heurísticas como DSatur e Welsh-Powell são indispensáveis em aplicações reais como alocação de registradores em compiladores e escalonamento de horários.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-4 border-t border-slate-800 bg-dark-950 flex justify-end">
+                  <button
+                    onClick={() => setShowTheoryModal(false)}
+                    className="px-5 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-white font-bold text-xs transition"
+                  >
+                    Entendi! Voltar ao Simulador
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MODAL: REDE LOCAL (LAN HOSTING) */}
+          {showLanModal && (
+            <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-dark-900 border border-slate-700 w-full max-w-md rounded-2xl p-5 shadow-2xl">
+                <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-800">
+                  <h3 className="font-extrabold text-base text-white flex items-center gap-2">
+                    <Icons.Share2 /> Servidor na Rede Local (LAN)
+                  </h3>
+                  <button onClick={() => setShowLanModal(false)} className="text-slate-400 hover:text-white">✕</button>
+                </div>
+
+                <p className="text-xs text-slate-300 mb-3 leading-relaxed">
+                  O simulador está disponível para qualquer dispositivo (celulares, tablets, notebooks do laboratório) conectado à mesma rede Wi-Fi ou Ethernet:
+                </p>
+
+                <div className="space-y-2 mb-4 font-mono text-xs">
+                  <div className="p-2.5 rounded-xl bg-dark-950 border border-teal-500/30 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] text-slate-500 block">Endereço IP na LAN:</span>
+                      <strong className="text-teal-400 text-sm">http://10.36.134.7:8080/</strong>
+                    </div>
+                    <button
+                      onClick={() => navigator.clipboard?.writeText('http://10.36.134.7:8080/')}
+                      className="px-2.5 py-1 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 text-[10px] font-bold"
+                    >
+                      Copiar
+                    </button>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-dark-950 border border-slate-800 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] text-slate-500 block">Acesso Localhost:</span>
+                      <strong className="text-slate-300">http://localhost:8080/</strong>
+                    </div>
+                    <button
+                      onClick={() => navigator.clipboard?.writeText('http://localhost:8080/')}
+                      className="px-2.5 py-1 rounded-lg bg-dark-850 hover:bg-dark-800 text-slate-400 text-[10px] font-bold"
+                    >
+                      Copiar
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-dark-950 rounded-xl border border-slate-800 text-[11px] text-slate-400 mb-4">
+                  💡 <strong>Dica de Uso:</strong> Compartilhe o link acima com colegas na mesma rede para demonstrações ao vivo ou estudos em grupo!
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => setShowLanModal(false)}
+                    className="px-5 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-white font-bold text-xs"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MODAL: GERADOR DE GRAFO ALEATÓRIO G(N, P) */}
+          {showRandomModal && (
+            <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-dark-900 border border-slate-700 w-full max-w-md rounded-2xl p-5 shadow-2xl">
+                <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-800">
+                  <h3 className="font-extrabold text-base text-white flex items-center gap-2">
+                    <Icons.Shuffle /> Gerador Erdős-Rényi G(n, p)
+                  </h3>
+                  <button onClick={() => setShowRandomModal(false)} className="text-slate-400 hover:text-white">✕</button>
+                </div>
+
+                <div className="space-y-4 text-xs mb-5">
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-slate-300 font-semibold">Número de Vértices (|V| = n):</span>
+                      <span className="text-teal-400 font-bold font-mono">{randomN}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="4"
+                      max="20"
+                      value={randomN}
+                      onChange={(e) => setRandomN(e.target.value)}
+                      className="w-full accent-teal-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-slate-300 font-semibold">Probabilidade de Aresta (p):</span>
+                      <span className="text-cyan-400 font-bold font-mono">{(randomP * 100).toFixed(0)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.10"
+                      max="0.85"
+                      step="0.05"
+                      value={randomP}
+                      onChange={(e) => setRandomP(e.target.value)}
+                      className="w-full accent-cyan-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => setShowRandomModal(false)}
+                    className="px-4 py-2 rounded-xl bg-dark-850 hover:bg-dark-800 text-slate-300 font-semibold text-xs"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleGenerateRandom}
+                    className="px-5 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-white font-bold text-xs transition shadow-lg shadow-teal-500/20"
+                  >
+                    Gerar Grafo
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<ChromaticGraphSimulator />);
+  </script>
+</body>
+</html>
