@@ -14,6 +14,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 
 import { carregarMotor } from './engine.js';
+import { aplicarNoApp } from './app.js';
 import {
   ALGORITMOS,
   TIPOS,
@@ -455,6 +456,63 @@ servidor.registerTool(
           text: `${descreverGrafo(grafo)} — ${r.nome}, ${r.coresUsadas} cor(es).\n\n${svg}`,
         },
       ],
+    };
+  }
+);
+
+servidor.registerTool(
+  'aplicar_no_app',
+  {
+    title: 'Aplicar o grafo no app web do simulador',
+    description:
+      'Manda o grafo para o app web (que precisa estar aberto num navegador) e usa os PRÓPRIOS controles do app: aba "Exportar / Importar" -> "Carregar JSON" -> algoritmo -> painel "Explicação". Devolve o estado final e o relatório que o app gerou. É o caminho para o agente pintar na interface web sem sair do MCP.',
+    inputSchema: {
+      ...specGrafo,
+      cdpUrl: z
+        .string()
+        .optional()
+        .describe('Endpoint HTTP do DevTools do navegador com o app aberto (ex.: http://127.0.0.1:9222). Padrão: SIMULADOR_CDP_URL ou detecção automática pelo DevToolsActivePort dos perfis do Chrome.'),
+      appUrl: z
+        .string()
+        .optional()
+        .describe('Trecho da URL da aba do simulador (ex.: 127.0.0.1:8080).'),
+      algoritmo: z
+        .enum(['dsatur', 'welsh-powell', 'greedy', 'exata'])
+        .optional()
+        .describe('Algoritmo a rodar no app (o botão correspondente do app é clicado).'),
+      executar: z.boolean().optional().describe('Rodar o algoritmo no app (padrão: true).'),
+      relatorio: z.boolean().optional().describe('Ler o relatório do painel "Explicação em Markdown" (padrão: true).'),
+    },
+  },
+  async (args) => {
+    const grafo = await montarGrafo(args);
+    const spec = {
+      name: grafo.nome,
+      timestamp: new Date().toISOString(),
+      nodes: grafo.nodes.map((n) => ({ id: n.id, label: n.label, x: n.x, y: n.y, color: n.color ?? null })),
+      edges: grafo.edges.map((e) => ({ id: e.id, source: e.source, target: e.target })),
+    };
+    const r = await aplicarNoApp({
+      spec: { grafo: spec, rotulos: args.rotulos },
+      cdpUrl: args.cdpUrl,
+      appUrl: args.appUrl,
+      algoritmo: args.algoritmo,
+      executar: args.executar !== false,
+      relatorio: args.relatorio !== false,
+    });
+    const classes = (r.estado?.classes || []).join(' | ');
+    const linhas = [
+      `Aplicado no app web: ${r.alvo}`,
+      `URL: ${r.url}`,
+      `Estado no app: ${r.estado?.contador ? `passo ${r.estado.contador}` : 'sem contador'}${classes ? ` | classes ${classes}` : ''}`,
+      `Abas do app: ${(r.estado?.abas || []).join(' | ') || '—'}`,
+    ];
+    if (r.relatorio) {
+      linhas.push('', 'Relatório gerado pelo app (painel "Explicação em Markdown"):', '', r.relatorio);
+    }
+    return {
+      content: [{ type: 'text', text: linhas.join('\n') }],
+      structuredContent: { url: r.url, estado: r.estado, relatorio: r.relatorio },
     };
   }
 );

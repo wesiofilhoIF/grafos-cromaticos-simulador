@@ -30,7 +30,8 @@ e os avalia em memória. Consequências:
 | `dica_coloracao` | Sugere o próximo vértice a colorar e a cor viável, com a justificativa (seleção DSatur). Aceita um estado parcial via `cores`. |
 | `relatorio_markdown` | O relatório Markdown do simulador: invariantes, classes de cor, passo a passo e conclusões. |
 | `explicar` | Texto didático de um tema (dsatur, welsh-powell, greedy, exata, chi, omega, delta, bipartido, complexidade, aplicacoes, visao-geral), opcionalmente ancorado num exemplo calculado. |
-| `desenhar_grafo` | SVG do grafo com a coloração aplicada, para ilustrar a explicação. |
+| `desenhar_grafo` | SVG do grafo com a coloração aplicada — para ilustrar a explicação. |
+| `aplicar_no_app` | **Manda o grafo para o app web aberto no navegador** e usa os controles do próprio app (aba *Exportar / Importar* → *Carregar JSON* → algoritmo → painel *Explicação*). Devolve o estado final e o relatório que o app gerou. |
 
 Seletor de grafo (comum a todas as ferramentas):
 
@@ -78,6 +79,36 @@ Registro no OpenCode (`~/.config/opencode/opencode.json`):
 | Variável | Efeito |
 | --- | --- |
 | `SIMULADOR_GRAFOS_HTML` | Caminho explícito do HTML do simulador. Sem ela, o servidor usa `../../simulador_grafos_cromaticos.html` (raiz do repositório), depois o cache local e, por último, baixa do GitHub. |
+| `SIMULADOR_CDP_URL` | Endpoint CDP do navegador com o app aberto (ex.: `http://127.0.0.1:9222`). Usado por `aplicar_no_app` quando a chamada não traz `cdpUrl`. |
+
+## Pilotar o app web (para usar em aula)
+
+O `aplicar_no_app` existe para o agente **pintar no app web** sem sair do MCP: ele fala CDP com o
+navegador que tem o app aberto e aciona os **próprios controles do app** (nada é injetado no
+React — o grafo entra pelo `input[type=file]` que o app já tem para *Carregar JSON*).
+
+Para a aula, cada PC precisa de:
+
+1. o app rodando (`node server.js`, porta 8080) e aberto no Chrome;
+2. o Chrome com a porta de debug: `google-chrome --remote-debugging-port=9222 http://127.0.0.1:8080/`;
+3. o MCP registrado (abaixo).
+
+Aí o agente chama, por exemplo:
+
+```json
+{"name": "aplicar_no_app",
+ "arguments": {"vertices": 8,
+               "arestas": [[0,1],[0,2],[0,4],[0,6],[1,2],[2,3],[2,6],[3,4],[3,5],[3,7],[4,5],[6,7]],
+               "rotulos": ["1","2","3","4","5","6","7","8"],
+               "algoritmo": "dsatur",
+               "cdpUrl": "http://127.0.0.1:9222"}}
+```
+
+e o grafo aparece pintado no app, na tela do projetor, com o relatório do próprio app.
+
+O endpoint CDP é resolvido nesta ordem: `cdpUrl` da chamada → `SIMULADOR_CDP_URL` →
+detecção automática pelo `DevToolsActivePort` dos perfis do Chrome. Se não houver navegador
+com o app aberto, a ferramenta devolve um erro explicando o que falta (nunca derruba o servidor).
 
 ## O simulador no navegador
 

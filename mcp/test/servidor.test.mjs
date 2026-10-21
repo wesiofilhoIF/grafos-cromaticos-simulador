@@ -30,12 +30,13 @@ function texto(resultado) {
     .join('\n');
 }
 
-test('anuncia as oito ferramentas', async () => {
+test('anuncia as nove ferramentas', async () => {
   await comCliente(async (cliente) => {
     const { tools } = await cliente.listTools();
     const nomes = tools.map((t) => t.name).sort();
     assert.deepEqual(nomes, [
       'analisar_grafo',
+      'aplicar_no_app',
       'comparar_algoritmos',
       'desenhar_grafo',
       'dica_coloracao',
@@ -175,6 +176,19 @@ test('desenhar_grafo devolve SVG com as classes coloridas', async () => {
     const t = texto(r);
     assert.match(t, /<svg[\s\S]*<\/svg>/);
     assert.match(t, /#10b981/);
+  });
+});
+
+test('aplicar_no_app devolve erro amigável quando não há navegador', async () => {
+  await comCliente(async (cliente) => {
+    // porta CDP fechada de propósito: a ferramenta tem de explicar o que falta,
+    // não derrubar o servidor.
+    const r = await cliente.callTool({
+      name: 'aplicar_no_app',
+      arguments: { vertices: 3, arestas: [[0,1],[1,2]], cdpUrl: 'http://127.0.0.1:9' },
+    });
+    assert.equal(r.isError, true);
+    assert.match(texto(r), /CDP|navegador|endpoint/i);
   });
 });
 
