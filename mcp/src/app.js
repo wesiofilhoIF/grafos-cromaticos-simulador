@@ -114,6 +114,13 @@ async function conectar(endpoint) {
 }
 
 // ------------------------------------------------------------- app helpers
+const JS_LIMPAR = `(() => {
+  const b = [...document.querySelectorAll('button')].find(x => (x.innerText || '').trim() === 'Limpar Tudo');
+  if (!b) return { ok: false, motivo: 'botao Limpar Tudo nao encontrado' };
+  b.click();
+  return { ok: true };
+})()`;
+
 const JS_ABRIR_ABA = `(() => {
   const b = [...document.querySelectorAll('button')].find(x => (x.innerText || '').trim().startsWith('Exportar / Importar'));
   if (!b) return { ok: false, motivo: 'aba Exportar/Importar nao encontrada' };
@@ -140,7 +147,7 @@ const jsonDoApp = (nodes, edges, nome) => JSON.stringify({
 });
 
 // ------------------------------------------------------------------ público
-export async function aplicarNoApp({ spec, cdpUrl, appUrl, algoritmo, executar = true, relatorio = true }) {
+export async function aplicarNoApp({ spec, cdpUrl, appUrl, algoritmo, executar = true, relatorio = true, limpar = true }) {
   const endpoint = resolverEndpoint(cdpUrl);
   const cdp = await conectar(endpoint);
   try {
@@ -160,6 +167,13 @@ export async function aplicarNoApp({ spec, cdpUrl, appUrl, algoritmo, executar =
       if (r.exceptionDetails) throw new Error(r.exceptionDetails.text || 'erro ao avaliar no app');
       return r.result?.value;
     };
+
+    // 0) limpa o grafo atual (botao "Limpar Tudo" do proprio app)
+    if (limpar) {
+      const limpou = await avaliar(JS_LIMPAR);
+      if (!limpou?.ok) throw new Error(limpou?.motivo || 'nao foi possivel limpar o grafo no app');
+      await new Promise((r) => setTimeout(r, 500));
+    }
 
     // 1) abre a aba "Exportar / Importar" (o app precisa renderizar o input)
     const aba = await avaliar(JS_ABRIR_ABA);

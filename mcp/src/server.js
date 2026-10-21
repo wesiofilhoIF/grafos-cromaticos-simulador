@@ -482,6 +482,7 @@ servidor.registerTool(
         .describe('Algoritmo a rodar no app (o botão correspondente do app é clicado).'),
       executar: z.boolean().optional().describe('Rodar o algoritmo no app (padrão: true).'),
       relatorio: z.boolean().optional().describe('Ler o relatório do painel "Explicação em Markdown" (padrão: true).'),
+      limpar: z.boolean().optional().describe('Limpar o grafo atual no app antes (botão "Limpar Tudo") — padrão: true.'),
     },
   },
   async (args) => {
@@ -499,6 +500,7 @@ servidor.registerTool(
       algoritmo: args.algoritmo,
       executar: args.executar !== false,
       relatorio: args.relatorio !== false,
+      limpar: args.limpar !== false,
     });
     const classes = (r.estado?.classes || []).join(' | ');
     const linhas = [
