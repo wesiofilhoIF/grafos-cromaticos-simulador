@@ -517,7 +517,7 @@
 
       const degrees = adj.map(neighbors => neighbors.length);
       const maxDeg = Math.max(...degrees, 0);
-      const minDeg = Math.min(...degrees, 0);
+      const minDeg = degrees.length ? Math.min(...degrees) : 0;
       const avgDeg = (degrees.reduce((a, b) => a + b, 0) / n).toFixed(2);
       const density = n > 1 ? ((2 * edges.length) / (n * (n - 1))).toFixed(3) : 0;
 
@@ -1127,7 +1127,15 @@
       linhas.push(`| Maior clique (ω) | ${metrics.omega} |`);
       linhas.push(`| Número cromático exato (χ) | ${metrics.chi} |`);
       linhas.push(`| Bipartido | ${metrics.isBipartite ? 'sim' : 'não'} |`);
-      if (metrics.oddCycle) linhas.push(`| Ciclo ímpar | ${metrics.oddCycle.join(' → ')} |`);
+      if (metrics.oddCycle) {
+        // metrics.oddCycle guarda ids (o destaque no canvas depende disso);
+        // no relatorio mostramos os rotulos.
+        const rotuloDe = (id) => {
+          const n = nodes.find(x => x.id === id);
+          return n ? n.label : id;
+        };
+        linhas.push(`| Ciclo ímpar | ${metrics.oddCycle.map(rotuloDe).join(' → ')} |`);
+      }
       linhas.push('');
       linhas.push(`Leitura: ω ≤ χ ≤ Δ+1 → ${metrics.omega} ≤ ${metrics.chi} ≤ ${metrics.maxDeg + 1}.`);
       if (metrics.chi === metrics.omega) {
@@ -1335,11 +1343,17 @@
           animPositions[i].y = Math.max(60, Math.min(h - 60, animPositions[i].y));
         }
 
-        setNodesCallback(prev => prev.map((n, idx) => ({
-          ...n,
-          x: Math.round(animPositions[idx].x),
-          y: Math.round(animPositions[idx].y)
-        })));
+        setNodesCallback(prev => prev.map((n, idx) => {
+          // `prev` pode ter mais vertices que o snapshot `animPositions` (um vertice
+          // adicionado durante a animacao). Nesse caso o vertice novo mantem a posicao
+          // que ja tinha, em vez de estourar em animPositions[idx].x.
+          const p = animPositions[idx];
+          return {
+            ...n,
+            x: Math.round(p ? p.x : n.x),
+            y: Math.round(p ? p.y : n.y)
+          };
+        }));
 
         if (frame < totalFrames) {
           requestAnimationFrame(step);

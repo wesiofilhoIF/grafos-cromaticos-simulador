@@ -35,6 +35,26 @@ test('invariantes dos grafos clássicos batem com a teoria', async () => {
   }
 });
 
+test('grau mínimo (delta) bate com os graus por vértice', async () => {
+  // Regressão: o motor usava Math.min(...degrees, 0), que devolve 0 sempre
+  // (simulador_grafos_cromaticos.html:520). δ tem de ser o menor grau real.
+  const casos = [
+    { nome: 'K2', spec: { vertices: 2, arestas: [[0, 1]] }, delta: 1, deltaMax: 1 },
+    { nome: 'C7', spec: { tipo: 'ciclo', n: 7 }, delta: 2, deltaMax: 2 },
+    { nome: 'K5', spec: { preset: 'k5' }, delta: 4, deltaMax: 4 },
+    { nome: 'K3,3', spec: { preset: 'k33' }, delta: 3, deltaMax: 3 },
+    { nome: 'Petersen', spec: { preset: 'petersen' }, delta: 3, deltaMax: 3 },
+  ];
+  for (const c of casos) {
+    const grafo = await montarGrafo(c.spec);
+    const a = await analisarGrafo(grafo.nodes, grafo.edges);
+    const graus = a.graus.map((g) => g.grau);
+    assert.equal(a.grauMinimo, Math.min(...graus), `${c.nome}: delta = menor grau`);
+    assert.equal(a.grauMinimo, c.delta, `${c.nome}: delta`);
+    assert.equal(a.grauMaximo, c.deltaMax, `${c.nome}: delta maximo`);
+  }
+});
+
 test('toda heurística devolve coloração própria válida', async () => {
   for (const preset of ['petersen', 'grotzsch', 'k5', 'k33', 'cycle5', 'cube']) {
     const grafo = await montarGrafo({ preset });

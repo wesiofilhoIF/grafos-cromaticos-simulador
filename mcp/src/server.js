@@ -88,7 +88,15 @@ function formatarAnalise(analise) {
     `| Número cromático exato (χ) | ${analise.numeroCromaticoExato} |`,
     `| Bipartido | ${analise.bipartido ? 'sim' : 'não'} |`,
   ];
-  if (analise.cicloImpar) linhas.push(`| Ciclo ímpar detectado | ${analise.cicloImpar.join(' → ')} |`);
+  if (analise.cicloImpar) {
+    // cicloImpar vem com ids internos (o app usa isso para destacar o ciclo no canvas);
+    // aqui mostramos os rotulos, como o relatorio do app.
+    const rotuloDe = (id) => {
+      const g = (analise.graus || []).find((x) => x.id === id);
+      return g ? g.label : id;
+    };
+    linhas.push(`| Ciclo ímpar detectado | ${analise.cicloImpar.map(rotuloDe).join(' → ')} |`);
+  }
   linhas.push('', `Graus por vértice: ${analise.graus.map((g) => `${g.label}=${g.grau}`).join(', ')}`);
   linhas.push('', `Leitura rápida: ω ≤ χ ≤ Δ+1 → ${analise.numeroDeCliques} ≤ ${analise.numeroCromaticoExato} ≤ ${analise.grauMaximo + 1}.`);
   if (analise.numeroCromaticoExato === analise.numeroDeCliques) {
