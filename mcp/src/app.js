@@ -228,6 +228,10 @@ export async function aplicarNoApp({ spec, cdpUrl, appUrl, algoritmo, executar =
       }
     }
 
+    // as classes de cor saem do texto do relatorio do app (o painel mostra markdown)
+    const classesDoRelatorio = (relatorioMd || '').match(/\*\*C\d+ · [^*]+\*\*/g) || [];
+    estado.classes = [...new Set(classesDoRelatorio)];
+
     return { ok: true, url: alvo.url, alvo: alvo.title, rods, estado, relatorio: relatorioMd };
   } finally {
     try { cdp.ws.close(); } catch { /* ignore */ }
