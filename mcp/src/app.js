@@ -148,6 +148,16 @@ const jsonDoApp = (nodes, edges, nome) => JSON.stringify({
 
 // ------------------------------------------------------------------ público
 export async function aplicarNoApp({ spec, cdpUrl, appUrl, algoritmo, executar = true, relatorio = true, limpar = true }) {
+  // Nunca derruba a chamada: se nao houver navegador (ou aba do app), devolve
+  // pintou:false com o motivo, e o servidor calcula o mesmo resultado pelo motor.
+  try {
+    return await aplicarNoAppInterno({ spec, cdpUrl, appUrl, algoritmo, executar, relatorio, limpar });
+  } catch (e) {
+    return { ok: false, pintou: false, motivo: e.message };
+  }
+}
+
+async function aplicarNoAppInterno({ spec, cdpUrl, appUrl, algoritmo, executar, relatorio, limpar }) {
   const endpoint = resolverEndpoint(cdpUrl);
   const cdp = await conectar(endpoint);
   try {
@@ -246,7 +256,7 @@ export async function aplicarNoApp({ spec, cdpUrl, appUrl, algoritmo, executar =
     const classesDoRelatorio = (relatorioMd || '').match(/\*\*C\d+ · [^*]+\*\*/g) || [];
     estado.classes = [...new Set(classesDoRelatorio)];
 
-    return { ok: true, url: alvo.url, alvo: alvo.title, rods, estado, relatorio: relatorioMd };
+    return { ok: true, pintou: true, url: alvo.url, alvo: alvo.title, rods, estado, relatorio: relatorioMd };
   } finally {
     try { cdp.ws.close(); } catch { /* ignore */ }
   }

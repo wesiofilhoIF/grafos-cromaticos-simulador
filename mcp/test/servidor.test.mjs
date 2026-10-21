@@ -179,16 +179,18 @@ test('desenhar_grafo devolve SVG com as classes coloridas', async () => {
   });
 });
 
-test('aplicar_no_app devolve erro amigável quando não há navegador', async () => {
+test('aplicar_no_app responde mesmo sem navegador (fallback pelo motor)', async () => {
   await comCliente(async (cliente) => {
-    // porta CDP fechada de propósito: a ferramenta tem de explicar o que falta,
-    // não derrubar o servidor.
+    // porta CDP sem navegador: a ferramenta nao pode depender de browser —
+    // ela avisa que nao pintou e devolve o mesmo relatorio, calculado pelo motor.
     const r = await cliente.callTool({
       name: 'aplicar_no_app',
       arguments: { vertices: 3, arestas: [[0,1],[1,2]], cdpUrl: 'http://127.0.0.1:9' },
     });
-    assert.equal(r.isError, true);
-    assert.match(texto(r), /CDP|navegador|endpoint/i);
+    assert.notEqual(r.isError, true);
+    assert.match(texto(r), /Sem navegador com o app aberto/);
+    assert.match(texto(r), /Relatório de Coloração/);
+    assert.match(texto(r), /Número cromático exato/);
   });
 });
 

@@ -502,6 +502,36 @@ servidor.registerTool(
       relatorio: args.relatorio !== false,
       limpar: args.limpar !== false,
     });
+
+    // Sem navegador (ou sem aba do app): a ferramenta NAO depende de browser —
+    // o proprio motor do simulador produz o mesmo relatorio.
+    if (!r.pintou) {
+      const motor = await carregarMotor();
+      const g = await montarGrafo(args);
+      const algoritmo = args.algoritmo ?? 'dsatur';
+      const passos = gerarPassos(motor, algoritmo, g.nodes, g.edges);
+      const ultimo = passos.length ? passos[passos.length - 1].nodeColors : [];
+      const cores = new Map(ultimo.map((c) => [c.id, c.color]));
+      const coloridos = g.nodes.map((n) => ({ ...n, color: cores.get(n.id) ?? null }));
+      const md = relatorioMarkdown(motor, {
+        nodes: coloridos,
+        edges: g.edges,
+        metrics: motor.analyzeGraphStructure(coloridos, g.edges),
+        passos,
+        algoritmo,
+        currentStepIndex: passos.length - 1,
+      });
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Sem navegador com o app aberto (${r.motivo}). Resultado pelo motor do MCP:\n\n${md}`,
+          },
+        ],
+        structuredContent: { pintou: false, motivo: r.motivo, relatorio: md },
+      };
+    }
+
     const classes = (r.estado?.classes || []).join(' | ');
     const linhas = [
       `Aplicado no app web: ${r.alvo}`,
@@ -514,7 +544,7 @@ servidor.registerTool(
     }
     return {
       content: [{ type: 'text', text: linhas.join('\n') }],
-      structuredContent: { url: r.url, estado: r.estado, relatorio: r.relatorio },
+      structuredContent: { pintou: true, url: r.url, estado: r.estado, relatorio: r.relatorio },
     };
   }
 );
